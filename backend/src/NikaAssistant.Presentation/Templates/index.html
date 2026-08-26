@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1440">
+  <title>Проблемы дня - прототип</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+</head>
+<body class="min-w-[1280px] bg-slate-100 text-slate-900">
+  <header class="border-b border-slate-200 bg-white">
+    <div class="mx-auto flex w-[1280px] items-center justify-between px-8 py-5">
+      <div>
+        <div class="text-sm font-medium text-slate-500">Личный инструмент Олеси</div>
+        <h1 class="mt-1 text-3xl font-bold tracking-normal text-slate-950">Проблемы дня</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="rounded-lg border border-slate-200 px-4 py-2 text-right">
+          <div class="text-xs text-slate-500">Сегодня</div>
+          <div class="text-sm font-semibold">26 мая 2026</div>
+        </div>
+        <button id="add-task-btn" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Добавить задачу</button>
+        <button class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Разобрать письмо</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto w-[1280px] px-8 py-8">
+    <section class="grid grid-cols-4 gap-4">
+      <div class="rounded-lg border border-red-200 bg-red-50 p-5">
+        <div class="text-sm font-medium text-slate-600">Срочно сегодня</div>
+        <div class="mt-2 text-4xl font-bold text-slate-950">2</div>
+        <div class="mt-2 text-sm text-slate-600">Требуют действия сейчас</div>
+      </div>
+      <div class="rounded-lg border border-orange-200 bg-orange-50 p-5">
+        <div class="text-sm font-medium text-slate-600">Зависло</div>
+        <div class="mt-2 text-4xl font-bold text-slate-950">2</div>
+        <div class="mt-2 text-sm text-slate-600">Нужно подтолкнуть участника</div>
+      </div>
+      <div class="rounded-lg border border-blue-200 bg-blue-50 p-5">
+        <div class="text-sm font-medium text-slate-600">Ожидание ответа</div>
+        <div class="mt-2 text-4xl font-bold text-slate-950">1</div>
+        <div class="mt-2 text-sm text-slate-600">Письма, подрядчики, HR</div>
+      </div>
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-5">
+        <div class="text-sm font-medium text-slate-600">На контроле</div>
+        <div class="mt-2 text-4xl font-bold text-slate-950">5</div>
+        <div class="mt-2 text-sm text-slate-600">Проверить статус у ответственных</div>
+      </div>
+    </section>
+
+    <section class="mt-6 grid grid-cols-[1fr_360px] gap-6">
+      <div class="rounded-lg border border-slate-200 bg-white">
+        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 class="text-lg font-bold">Список проблем</h2>
+            <p class="mt-1 text-sm text-slate-500">Сначала срочное, затем зависшее и ожидания</p>
+          </div>
+          <div class="flex gap-2">
+            <span class="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200">Срочно</span>
+            <span class="rounded-md bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700 ring-1 ring-orange-200">Зависло</span>
+            <span class="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200">Ожидание</span>
+          </div>
+        </div>
+
+        <table class="w-full table-fixed text-left">
+          <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+            <tr>
+              <th class="w-[40%] px-4 py-3 font-semibold">Задача</th>
+              <th class="w-[18%] px-4 py-3 font-semibold">Ответственный</th>
+              <th class="w-[10%] px-4 py-3 font-semibold">Статус</th>
+              <th class="w-[32%] px-4 py-3 font-semibold">Комментарий</th>
+            </tr>
+          </thead>
+          <tbody id="tasks-body">
+            <tr class="border-b border-slate-200">
+              <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="4">Загрузка задач…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <aside class="space-y-6">
+        <div class="rounded-lg border border-slate-200 bg-white p-5">
+          <h2 class="text-lg font-bold">Проблемы по типам</h2>
+          <div class="mt-5 flex items-end gap-4 border-b border-slate-200 pb-3">
+            <div class="flex w-14 flex-col items-center gap-2">
+              <div class="h-28 w-10 rounded-t bg-red-600"></div>
+              <div class="text-xs text-slate-600">Срочно</div>
+            </div>
+            <div class="flex w-14 flex-col items-center gap-2">
+              <div class="h-28 w-10 rounded-t bg-orange-500"></div>
+              <div class="text-xs text-slate-600">Зависло</div>
+            </div>
+            <div class="flex w-14 flex-col items-center gap-2">
+              <div class="h-14 w-10 rounded-t bg-blue-600"></div>
+              <div class="text-xs text-slate-600">Ожид.</div>
+            </div>
+            <div class="flex w-14 flex-col items-center gap-2">
+              <div class="h-40 w-10 rounded-t bg-emerald-600"></div>
+              <div class="text-xs text-slate-600">Контр.</div>
+            </div>
+          </div>
+          <p class="mt-4 text-sm text-slate-600">Если Recharts CDN недоступен, этот статичный график всё равно показывает распределение проблем.</p>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-5">
+          <h2 class="text-lg font-bold">Нагрузка по ответственным</h2>
+          <div class="mt-4 space-y-4">
+            <div>
+              <div class="mb-1 flex justify-between text-sm"><span>Олеся</span><span>4</span></div>
+              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-4/5 rounded bg-blue-600"></div></div>
+            </div>
+            <div>
+              <div class="mb-1 flex justify-between text-sm"><span>Настя</span><span>2</span></div>
+              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-2/5 rounded bg-blue-600"></div></div>
+            </div>
+            <div>
+              <div class="mb-1 flex justify-between text-sm"><span>Антонина</span><span>1</span></div>
+              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-1/5 rounded bg-blue-600"></div></div>
+            </div>
+            <div>
+              <div class="mb-1 flex justify-between text-sm"><span>Денис</span><span>0</span></div>
+              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-0 rounded bg-blue-600"></div></div>
+            </div>
+            <div>
+              <div class="mb-1 flex justify-between text-sm"><span>Регионы</span><span>0</span></div>
+              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-0 rounded bg-blue-600"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-5">
+          <h2 class="text-lg font-bold">Ручное подтверждение</h2>
+          <p class="mt-2 text-sm text-slate-600">Инструмент может предложить обновить статус, но решение подтверждает Олеся.</p>
+          <div class="mt-4 space-y-2">
+            <button class="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">Подтвердить выбранные изменения</button>
+            <button class="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Оставить в ожидании</button>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50">
+    <div class="w-[480px] rounded-xl bg-white p-6 shadow-xl">
+      <h3 class="text-lg font-bold text-slate-950">Новая задача</h3>
+      <form id="task-form" class="mt-4 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Задача</label>
+          <input name="task" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Ответственный</label>
+          <input name="assignee" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Комментарий</label>
+          <input name="comment" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="task-cancel" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Отмена</button>
+          <button type="submit" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener("load", function () {
+      if (!window.Recharts) {
+        console.log("Recharts CDN не загрузился. Прототип показывает статичные графики.");
+      }
+    });
+
+    (function () {
+      var modal = document.getElementById("task-modal");
+      var openBtn = document.getElementById("add-task-btn");
+      var cancelBtn = document.getElementById("task-cancel");
+      var form = document.getElementById("task-form");
+
+      function showModal() {
+        modal.style.display = "flex";
+      }
+
+      function hideModal() {
+        modal.style.display = "none";
+      }
+
+      openBtn.addEventListener("click", showModal);
+      cancelBtn.addEventListener("click", hideModal);
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+
+        var payload = {
+          task: form.task.value.trim(),
+          assignee: form.assignee.value.trim(),
+          comment: form.comment.value.trim()
+        };
+
+        try {
+          var res = await fetch("/AddTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            form.reset();
+            hideModal();
+            alert("Задача добавлена");
+            if (window.loadTasks) window.loadTasks();
+          } else {
+            alert("Не удалось добавить задачу");
+          }
+        } catch (err) {
+          alert("Ошибка при отправке задачи");
+        }
+      });
+    })();
+
+    (function () {
+      function escapeHtml(value) {
+        var div = document.createElement("div");
+        div.textContent = value == null ? "" : String(value);
+        return div.innerHTML;
+      }
+
+      window.loadTasks = async function () {
+        var tbody = document.getElementById("tasks-body");
+        if (!tbody) return;
+
+        try {
+          var res = await fetch("/GetTasks");
+          if (!res.ok) return;
+          var tasks = await res.json();
+          if (!Array.isArray(tasks)) return;
+
+          tbody.innerHTML = "";
+
+          if (tasks.length === 0) {
+            tbody.innerHTML = '<tr class="border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="4">Нет задач</td></tr>';
+            return;
+          }
+
+          tasks.forEach(function (t) {
+            var done = (t.status || "").indexOf("x") !== -1;
+            var tr = document.createElement("tr");
+            tr.className = "border-b border-slate-200";
+
+            var taskCell = document.createElement("td");
+            taskCell.className = "px-4 py-4 align-top";
+            taskCell.innerHTML = '<div class="font-semibold text-slate-950">' + escapeHtml(t.task) + '</div>';
+
+            var assigneeCell = document.createElement("td");
+            assigneeCell.className = "px-4 py-4 align-top";
+            assigneeCell.innerHTML = '<div class="font-medium">' + escapeHtml(t.assignee) + '</div>';
+
+            var statusCell = document.createElement("td");
+            statusCell.className = "px-4 py-4 align-top";
+            statusCell.innerHTML = '<input type="checkbox" disabled' + (done ? " checked" : "") + '>';
+
+            var commentCell = document.createElement("td");
+            commentCell.className = "px-4 py-4 align-top text-sm text-slate-700";
+            commentCell.textContent = t.comment || "";
+
+            tr.appendChild(taskCell);
+            tr.appendChild(assigneeCell);
+            tr.appendChild(statusCell);
+            tr.appendChild(commentCell);
+            tbody.appendChild(tr);
+          });
+        } catch (e) {
+          // оставляем заглушку при ошибке
+        }
+      };
+
+      window.addEventListener("load", window.loadTasks);
+    })();
+  </script>
+</body>
+</html>
