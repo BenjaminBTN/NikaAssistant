@@ -11,12 +11,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Templates\index.html" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\NikaAssistant.Application\NikaAssistant.Application.csproj" />
     <ProjectReference Include="..\NikaAssistant.Contracts\NikaAssistant.Contracts.csproj" />
+    <ProjectReference Include="..\NikaAssistant.Infrastructure.LLM\NikaAssistant.Infrastructure.LLM.csproj" />
   </ItemGroup>
 
 </Project>

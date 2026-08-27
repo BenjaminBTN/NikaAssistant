@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NikaAssistant.Contracts\NikaAssistant.Contracts.csproj" />
+    <ProjectReference Include="..\NikaAssistant.Infrastructure.LLM\NikaAssistant.Infrastructure.LLM.csproj" />
   </ItemGroup>
 
 </Project>

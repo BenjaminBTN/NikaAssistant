@@ -142,6 +142,23 @@
         </div>
       </aside>
     </section>
+    <section class="mt-6">
+      <div class="rounded-lg border border-slate-200 bg-white">
+        <div class="border-b border-slate-200 px-5 py-4">
+          <h2 class="text-lg font-bold">Чат с ассистентом</h2>
+          <p class="mt-1 text-sm text-slate-500">Задайте вопрос — ответит LLM через OpenRouter</p>
+        </div>
+        <div id="chat-log" class="h-[360px] space-y-3 overflow-y-auto px-5 py-4">
+          <div class="text-sm text-slate-400">История сообщений пуста.</div>
+        </div>
+        <form id="chat-form" class="flex items-end gap-3 border-t border-slate-200 px-5 py-4">
+          <textarea id="chat-input" rows="2" required placeholder="Введите сообщение…"
+            class="flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
+          <button type="submit" id="chat-send"
+            class="rounded-lg bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">Отправить</button>
+        </form>
+      </div>
+    </section>
   </main>
 
   <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50">
@@ -279,6 +296,75 @@
       };
 
       window.addEventListener("load", window.loadTasks);
+    })();
+
+    (function () {
+      var log = document.getElementById("chat-log");
+      var form = document.getElementById("chat-form");
+      var input = document.getElementById("chat-input");
+      var sendBtn = document.getElementById("chat-send");
+
+      function escapeHtml(value) {
+        var div = document.createElement("div");
+        div.textContent = value == null ? "" : String(value);
+        return div.innerHTML;
+      }
+
+      function appendBubble(role, text) {
+        if (log.querySelector(".text-slate-400")) {
+          log.innerHTML = "";
+        }
+
+        var wrap = document.createElement("div");
+        wrap.className = "flex " + (role === "user" ? "justify-end" : "justify-start");
+
+        var bubble = document.createElement("div");
+        bubble.className = "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm " +
+          (role === "user"
+            ? "bg-slate-950 text-white"
+            : "bg-slate-100 text-slate-900");
+        bubble.textContent = text;
+
+        wrap.appendChild(bubble);
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+
+        var message = input.value.trim();
+        if (!message) return;
+
+        appendBubble("user", message);
+        input.value = "";
+        sendBtn.disabled = true;
+        appendBubble("assistant", "Печатает…");
+
+        try {
+          var res = await fetch("/Chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: message })
+          });
+
+          var bubbles = log.querySelectorAll(".bg-slate-100");
+          var last = bubbles[bubbles.length - 1];
+          if (res.ok) {
+            var data = await res.json();
+            last.textContent = data.answer || "(пустой ответ)";
+          } else {
+            last.textContent = "Ошибка при получении ответа";
+          }
+          log.scrollTop = log.scrollHeight;
+        } catch (err) {
+          var bubbles = log.querySelectorAll(".bg-slate-100");
+          var last = bubbles[bubbles.length - 1];
+          last.textContent = "Ошибка сети";
+        } finally {
+          sendBtn.disabled = false;
+        }
+      });
     })();
   </script>
 </body>
