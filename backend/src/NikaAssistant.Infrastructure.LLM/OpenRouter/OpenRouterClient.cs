@@ -16,6 +16,8 @@ public sealed class OpenRouterClient : ILlmClient
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _model;
+    private readonly string _referer;
+    private readonly string _title;
 
     public OpenRouterClient(HttpClient httpClient, IConfiguration configuration)
     {
@@ -23,6 +25,8 @@ public sealed class OpenRouterClient : ILlmClient
         _apiKey = configuration["OpenRouter:ApiKey"]
             ?? throw new InvalidOperationException("OpenRouter:ApiKey не задан в конфигурации.");
         _model = configuration["OpenRouter:Model"] ?? "openai/gpt-4o";
+        _referer = configuration["OpenRouter:Referer"] ?? "https://nika-assistant.example.com";
+        _title = configuration["OpenRouter:Title"] ?? "NikaAssistant";
         _httpClient.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
     }
 
@@ -40,8 +44,8 @@ public sealed class OpenRouterClient : ILlmClient
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-        httpRequest.Headers.Add("HTTP-Referer", "https://nika.local");
-        httpRequest.Headers.Add("X-Title", "NikaAssistant");
+        httpRequest.Headers.Add("HTTP-Referer", _referer);
+        httpRequest.Headers.Add("X-Title", _title);
         httpRequest.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);

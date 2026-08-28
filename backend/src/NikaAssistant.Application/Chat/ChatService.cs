@@ -9,6 +9,11 @@ public sealed class ChatService
 {
     private static readonly JsonSerializerOptions JsonOptions = JsonSerializerOptions.Web;
 
+    private static readonly string[] TaskTriggers =
+    {
+        "добав", "созда", "задач", "запис", "добавить", "новую задач", "сформируй", "запланируй", "напомни"
+    };
+
     private static readonly LlmTool AddTaskTool = new(
         "add_task",
         "Добавить новую разовую задачу в список задач пользователя. Используй, когда пользователь просит создать или добавить задачу.",
@@ -37,9 +42,15 @@ public sealed class ChatService
     {
         var messages = new List<LlmMessage>
         {
-            new("system", "Ты — помощник Nika. Общайся на русском. Если пользователь просит добавить задачу, вызови инструмент add_task и дождись подтверждения, затем кратко подтверди выполнение."),
+            new("system", "Ты — помощник Nika. Общайся на русском. Инструмент add_task вызывай СТРОГО только когда пользователь явно просит добавить, создать или записать задачу. Во всех остальных случаях (вопросы, болтовня, уточнения) просто отвечай текстом и никаких задач не создавай."),
             new("user", message)
         };
+
+        if (!LooksLikeTaskRequest(message))
+        {
+            var plain = await _llm.CompleteAsync(messages, null, cancellationToken);
+            return plain.Content ?? string.Empty;
+        }
 
         var response = await _llm.CompleteAsync(messages, new[] { AddTaskTool }, cancellationToken);
         messages.Add(ToAssistantMessage(response));
@@ -69,6 +80,9 @@ public sealed class ChatService
 
         return response.Content ?? string.Empty;
     }
+
+    private static bool LooksLikeTaskRequest(string message) =>
+        TaskTriggers.Any(t => message.Contains(t, StringComparison.OrdinalIgnoreCase));
 
     private static LlmMessage ToAssistantMessage(LlmResponse response)
     {
