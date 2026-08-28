@@ -28,7 +28,7 @@
       <div class="flex items-center gap-3">
         <div class="rounded-lg border border-slate-200 px-4 py-2 text-right">
           <div class="text-xs text-slate-500">Сегодня</div>
-          <div class="text-sm font-semibold">26 мая 2026</div>
+          <div id="today-date" class="text-sm font-semibold">—</div>
         </div>
         <button id="add-task-btn" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Добавить задачу</button>
         <button class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Разобрать письмо</button>
@@ -77,10 +77,10 @@
         <table class="w-full table-fixed text-left">
           <thead class="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th class="w-[37%] px-4 py-3 font-semibold">Задача</th>
+              <th class="w-[10%] px-4 py-3 font-semibold">Статус</th>
+              <th class="w-[34%] px-4 py-3 font-semibold">Задача</th>
               <th class="w-[16%] px-4 py-3 font-semibold">Ответственный</th>
-              <th class="w-[8%] px-4 py-3 font-semibold">Статус</th>
-              <th class="w-[27%] px-4 py-3 font-semibold">Комментарий</th>
+              <th class="w-[28%] px-4 py-3 font-semibold">Комментарий</th>
               <th class="w-[12%] px-4 py-3 font-semibold">Действия</th>
             </tr>
           </thead>
@@ -201,6 +201,15 @@
     });
 
     (function () {
+      var months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+      var el = document.getElementById("today-date");
+      if (el) {
+        var now = new Date();
+        el.textContent = now.getDate() + " " + months[now.getMonth()] + " " + now.getFullYear();
+      }
+    })();
+
+    (function () {
       var modal = document.getElementById("task-modal");
       var openBtn = document.getElementById("add-task-btn");
       var cancelBtn = document.getElementById("task-cancel");
@@ -273,17 +282,27 @@
         var tr = document.createElement("tr");
         tr.className = "border-b border-slate-200";
 
+        var statusCell = document.createElement("td");
+        statusCell.className = "px-4 py-4 align-top";
+        var checkBtn = document.createElement("button");
+        checkBtn.type = "button";
+        checkBtn.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors " +
+          (done
+            ? "border-emerald-600 bg-emerald-600 text-white"
+            : "border-slate-300 bg-white text-transparent hover:border-emerald-500");
+        checkBtn.innerHTML = '<svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-9"/></svg>';
+        checkBtn.addEventListener("click", function () {
+          toggleStatus(t, checkBtn, tr);
+        });
+        statusCell.appendChild(checkBtn);
+
         var taskCell = document.createElement("td");
         taskCell.className = "px-4 py-4 align-top";
-        taskCell.innerHTML = '<div class="font-semibold text-slate-950">' + escapeHtml(t.task) + '</div>';
+        taskCell.innerHTML = '<div class="font-semibold text-slate-950' + (done ? " line-through text-slate-400" : "") + '">' + escapeHtml(t.task) + '</div>';
 
         var assigneeCell = document.createElement("td");
         assigneeCell.className = "px-4 py-4 align-top";
         assigneeCell.innerHTML = '<div class="font-medium">' + escapeHtml(t.assignee) + '</div>';
-
-        var statusCell = document.createElement("td");
-        statusCell.className = "px-4 py-4 align-top";
-        statusCell.innerHTML = '<input type="checkbox" disabled' + (done ? " checked" : "") + '>';
 
         var commentCell = document.createElement("td");
         commentCell.className = "px-4 py-4 align-top text-sm text-slate-700";
@@ -300,12 +319,55 @@
         });
         actionCell.appendChild(deleteBtn);
 
+        tr.appendChild(statusCell);
         tr.appendChild(taskCell);
         tr.appendChild(assigneeCell);
-        tr.appendChild(statusCell);
         tr.appendChild(commentCell);
         tr.appendChild(actionCell);
         return tr;
+      }
+
+      function renderStatus(checkBtn, taskEl, done) {
+        checkBtn.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors " +
+          (done
+            ? "border-emerald-600 bg-emerald-600 text-white"
+            : "border-slate-300 bg-white text-transparent hover:border-emerald-500");
+        if (taskEl) {
+          taskEl.classList.toggle("line-through", done);
+          taskEl.classList.toggle("text-slate-400", done);
+        }
+      }
+
+      async function toggleStatus(t, checkBtn, tr) {
+        var wasDone = (t.status || "").indexOf("x") !== -1;
+        var newStatus = wasDone ? "[ ]" : "[x]";
+        var taskTitleEl = tr.querySelector(".font-semibold");
+
+        renderStatus(checkBtn, taskTitleEl, !wasDone);
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: t.assignee,
+              comment: t.comment,
+              newStatus: newStatus
+            })
+          });
+
+          if (res.ok) {
+            t.status = newStatus;
+          } else {
+            renderStatus(checkBtn, taskTitleEl, wasDone);
+            alert("Не удалось обновить статус");
+          }
+        } catch (err) {
+          renderStatus(checkBtn, taskTitleEl, wasDone);
+          alert("Ошибка при обновлении статуса");
+        }
       }
 
       async function deleteTask(t, row) {

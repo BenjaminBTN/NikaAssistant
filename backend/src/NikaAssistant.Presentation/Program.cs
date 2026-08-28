@@ -2,6 +2,7 @@ using NikaAssistant.Application.Chat;
 using NikaAssistant.Application.CreateTask;
 using NikaAssistant.Application.DeleteTask;
 using NikaAssistant.Application.GetTask;
+using NikaAssistant.Application.UpdateTask;
 using NikaAssistant.Contracts;
 using NikaAssistant.Infrastructure.LLM;
 using NikaAssistant.Infrastructure.LLM.OpenRouter;
@@ -16,6 +17,7 @@ builder.Services.AddSingleton<IOneTimeTaskStorage, MarkdownOneTimeTaskStorage>()
 builder.Services.AddScoped<AddTaskHandler>();
 builder.Services.AddScoped<GetTaskHandler>();
 builder.Services.AddScoped<DeleteTaskHandler>();
+builder.Services.AddScoped<UpdateTaskHandler>();
 builder.Services.AddScoped<ChatService>();
 
 var app = builder.Build();
@@ -49,6 +51,12 @@ app.MapGet("/GetTasks", async (GetTaskHandler handler) =>
 app.MapPost("/DeleteTask", async (DeleteTaskRequest request, DeleteTaskHandler handler) =>
 {
     await handler.DeleteTaskAsync(request);
+    return Results.Ok();
+});
+
+app.MapPost("/UpdateTask", async (UpdateTaskRequest request, UpdateTaskHandler handler) =>
+{
+    await handler.UpdateTaskAsync(request);
     return Results.Ok();
 });
 
