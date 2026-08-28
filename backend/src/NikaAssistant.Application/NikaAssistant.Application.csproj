@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NikaAssistant.Contracts\NikaAssistant.Contracts.csproj" />
     <ProjectReference Include="..\NikaAssistant.Infrastructure.LLM\NikaAssistant.Infrastructure.LLM.csproj" />
     <ProjectReference Include="..\NikaAssistant.Infrastructure.LocalStorage\NikaAssistant.Infrastructure.LocalStorage.csproj" />

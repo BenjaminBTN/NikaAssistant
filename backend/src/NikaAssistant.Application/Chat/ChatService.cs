@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using NikaAssistant.Contracts;
 using NikaAssistant.Infrastructure.LLM;
 using NikaAssistant.Infrastructure.LocalStorage;
@@ -8,6 +9,12 @@ namespace NikaAssistant.Application.Chat;
 public sealed class ChatService
 {
     private static readonly JsonSerializerOptions JsonOptions = JsonSerializerOptions.Web;
+
+    private const string SystemPrompt =
+        "Ты — помощник Nika. Общайся на русском. Инструмент add_task вызывай СТРОГО только когда пользователь явно просит добавить, создать или записать задачу. Во всех остальных случаях (вопросы, болтовня, уточнения) просто отвечай текстом и никаких задач не создавай.";
+
+    private const string HistoryKey = "chat_history";
+    private const int MaxHistoryMessages = 40;
 
     private static readonly string[] TaskTriggers =
     {
@@ -23,7 +30,8 @@ public sealed class ChatService
           "properties": {
             "task": { "type": "string", "description": "Текст задачи" },
             "assignee": { "type": "string", "description": "Ответственный за задачу" },
-            "comment": { "type": "string", "description": "Комментарий к задаче" }
+            "comment": { "type": "string", "description": "Комментарий к задаче" },
+            "tags": { "type": "array", "items": { "type": "string", "enum": ["Срочно", "Зависло", "Ожидание"] }, "description": "Теги задачи" }
           },
           "required": ["task"]
         }
@@ -31,24 +39,26 @@ public sealed class ChatService
 
     private readonly ILlmClient _llm;
     private readonly IOneTimeTaskStorage _storage;
+    private readonly ISession? _session;
 
-    public ChatService(ILlmClient llm, IOneTimeTaskStorage storage)
+    public ChatService(ILlmClient llm, IOneTimeTaskStorage storage, IHttpContextAccessor httpContextAccessor)
     {
         _llm = llm;
         _storage = storage;
+        _session = httpContextAccessor.HttpContext?.Session;
     }
 
     public async Task<ChatResult> AskAsync(string message, CancellationToken cancellationToken = default)
     {
-        var messages = new List<LlmMessage>
-        {
-            new("system", "Ты — помощник Nika. Общайся на русском. Инструмент add_task вызывай СТРОГО только когда пользователь явно просит добавить, создать или записать задачу. Во всех остальных случаях (вопросы, болтовня, уточнения) просто отвечай текстом и никаких задач не создавай."),
-            new("user", message)
-        };
+        var messages = new List<LlmMessage> { new("system", SystemPrompt) };
+        messages.AddRange(LoadHistory());
+        messages.Add(new LlmMessage("user", message));
 
         if (!LooksLikeTaskRequest(message))
         {
             var plain = await _llm.CompleteAsync(messages, null, cancellationToken);
+            messages.Add(new LlmMessage("assistant", plain.Content ?? string.Empty));
+            SaveHistory(messages);
             return new ChatResult(plain.Content ?? string.Empty, Array.Empty<OneTimeTask>());
         }
 
@@ -78,10 +88,53 @@ public sealed class ChatService
         if (response.ToolCalls.Count > 0)
         {
             var final = await _llm.CompleteAsync(messages, null, cancellationToken);
+            messages.Add(new LlmMessage("assistant", final.Content ?? string.Empty));
+            SaveHistory(messages);
             return new ChatResult(final.Content ?? string.Empty, addedTasks);
         }
 
+        messages.Add(new LlmMessage("assistant", response.Content ?? string.Empty));
+        SaveHistory(messages);
         return new ChatResult(response.Content ?? string.Empty, addedTasks);
+    }
+
+    private List<LlmMessage> LoadHistory()
+    {
+        if (_session is null)
+        {
+            return new List<LlmMessage>();
+        }
+
+        var json = _session.GetString(HistoryKey);
+        if (string.IsNullOrEmpty(json))
+        {
+            return new List<LlmMessage>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<LlmMessage>>(json, JsonOptions) ?? new List<LlmMessage>();
+        }
+        catch (JsonException)
+        {
+            return new List<LlmMessage>();
+        }
+    }
+
+    private void SaveHistory(List<LlmMessage> messages)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        var conversational = messages.Skip(1).ToList();
+        if (conversational.Count > MaxHistoryMessages)
+        {
+            conversational = conversational.Skip(conversational.Count - MaxHistoryMessages).ToList();
+        }
+
+        _session.SetString(HistoryKey, JsonSerializer.Serialize(conversational, JsonOptions));
     }
 
     private static bool LooksLikeTaskRequest(string message) =>

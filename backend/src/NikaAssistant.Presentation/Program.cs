@@ -12,6 +12,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient<OpenRouterClient>();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenRouterClient>());
 builder.Services.AddSingleton<IOneTimeTaskStorage, MarkdownOneTimeTaskStorage>();
 builder.Services.AddScoped<AddTaskHandler>();
@@ -21,6 +29,8 @@ builder.Services.AddScoped<UpdateTaskHandler>();
 builder.Services.AddScoped<ChatService>();
 
 var app = builder.Build();
+
+app.UseSession();
 
 if(app.Environment.IsDevelopment())
 {
