@@ -9,16 +9,22 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     private static readonly object Sync = new();
 
     private readonly string _filePath;
+    private readonly string? _defaultAssignee;
 
     public MarkdownOneTimeTaskStorage(IConfiguration configuration)
     {
         _filePath = configuration["Storage:OneTimeTasksPath"] ?? DefaultFilePath;
+        _defaultAssignee = configuration["Storage:DefaultAssignee"];
     }
+
+    public string ResolveAssignee(string? assignee) =>
+        string.IsNullOrWhiteSpace(assignee) ? _defaultAssignee ?? string.Empty : assignee;
 
     public Task AddAsync(AddTaskRequest request, CancellationToken cancellationToken = default)
     {
+        var assignee = ResolveAssignee(request.Assignee);
         var tags = request.Tags == null ? "" : string.Join(", ", request.Tags.Select(Escape));
-        var row = BuildRow("[ ]", request.Task, request.Assignee, tags, request.Comment);
+        var row = BuildRow("[ ]", request.Task, assignee, tags, request.Comment);
 
         lock (Sync)
         {

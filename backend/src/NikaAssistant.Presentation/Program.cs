@@ -45,10 +45,11 @@ app.MapGet("/", (HttpContext http) =>
     return Results.File(filePath, "text/html");
 });
 
-app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler) =>
+app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler, IOneTimeTaskStorage storage) =>
 {
     await handler.AddTaskAsync(request);
-    var created = new OneTimeTask("[ ]", request.Task, request.Assignee, request.Comment ?? "", request.Tags ?? new List<string>());
+    var assignee = storage.ResolveAssignee(request.Assignee);
+    var created = new OneTimeTask("[ ]", request.Task, assignee, request.Comment ?? "", request.Tags ?? new List<string>());
     return Results.Ok(created);
 });
 
