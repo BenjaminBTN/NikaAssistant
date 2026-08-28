@@ -2,12 +2,16 @@ using NikaAssistant.Application.Chat;
 using NikaAssistant.Application.CreateTask;
 using NikaAssistant.Application.GetTask;
 using NikaAssistant.Contracts;
+using NikaAssistant.Infrastructure.LLM;
 using NikaAssistant.Infrastructure.LLM.OpenRouter;
+using NikaAssistant.Infrastructure.LocalStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient<OpenRouterClient>();
+builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenRouterClient>());
+builder.Services.AddSingleton<IOneTimeTaskStorage, MarkdownOneTimeTaskStorage>();
 builder.Services.AddScoped<AddTaskHandler>();
 builder.Services.AddScoped<GetTaskHandler>();
 builder.Services.AddScoped<ChatService>();

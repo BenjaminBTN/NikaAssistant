@@ -14,6 +14,7 @@
     <ProjectReference Include="..\NikaAssistant.Application\NikaAssistant.Application.csproj" />
     <ProjectReference Include="..\NikaAssistant.Contracts\NikaAssistant.Contracts.csproj" />
     <ProjectReference Include="..\NikaAssistant.Infrastructure.LLM\NikaAssistant.Infrastructure.LLM.csproj" />
+    <ProjectReference Include="..\NikaAssistant.Infrastructure.LocalStorage\NikaAssistant.Infrastructure.LocalStorage.csproj" />
   </ItemGroup>
 
 </Project>

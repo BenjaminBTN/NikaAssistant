@@ -1,16 +1,82 @@
-using NikaAssistant.Infrastructure.LLM.OpenRouter;
+using NikaAssistant.Contracts;
+using NikaAssistant.Infrastructure.LLM;
+using NikaAssistant.Infrastructure.LocalStorage;
+using System.Text.Json;
 
 namespace NikaAssistant.Application.Chat;
 
 public sealed class ChatService
 {
-    private readonly OpenRouterClient _client;
+    private static readonly JsonSerializerOptions JsonOptions = JsonSerializerOptions.Web;
 
-    public ChatService(OpenRouterClient client)
+    private static readonly LlmTool AddTaskTool = new(
+        "add_task",
+        "Добавить новую разовую задачу в список задач пользователя. Используй, когда пользователь просит создать или добавить задачу.",
+        """
+        {
+          "type": "object",
+          "properties": {
+            "task": { "type": "string", "description": "Текст задачи" },
+            "assignee": { "type": "string", "description": "Ответственный за задачу" },
+            "comment": { "type": "string", "description": "Комментарий к задаче" }
+          },
+          "required": ["task"]
+        }
+        """);
+
+    private readonly ILlmClient _llm;
+    private readonly IOneTimeTaskStorage _storage;
+
+    public ChatService(ILlmClient llm, IOneTimeTaskStorage storage)
     {
-        _client = client;
+        _llm = llm;
+        _storage = storage;
     }
 
-    public Task<string> AskAsync(string message, CancellationToken cancellationToken = default) =>
-        _client.ChatAsync(message, cancellationToken);
+    public async Task<string> AskAsync(string message, CancellationToken cancellationToken = default)
+    {
+        var messages = new List<LlmMessage>
+        {
+            new("system", "Ты — помощник Nika. Общайся на русском. Если пользователь просит добавить задачу, вызови инструмент add_task и дождись подтверждения, затем кратко подтверди выполнение."),
+            new("user", message)
+        };
+
+        var response = await _llm.CompleteAsync(messages, new[] { AddTaskTool }, cancellationToken);
+        messages.Add(ToAssistantMessage(response));
+
+        foreach (var call in response.ToolCalls)
+        {
+            if (call.Name == "add_task")
+            {
+                var request = JsonSerializer.Deserialize<AddTaskRequest>(call.ArgumentsJson, JsonOptions);
+                if (request is not null)
+                {
+                    await _storage.AddAsync(request, cancellationToken);
+                    messages.Add(new LlmMessage("tool", $"Задача успешно добавлена: {request.Task}", call.Id));
+                }
+                else
+                {
+                    messages.Add(new LlmMessage("tool", "Не удалось разобрать аргументы задачи.", call.Id));
+                }
+            }
+        }
+
+        if (response.ToolCalls.Count > 0)
+        {
+            var final = await _llm.CompleteAsync(messages, null, cancellationToken);
+            return final.Content ?? string.Empty;
+        }
+
+        return response.Content ?? string.Empty;
+    }
+
+    private static LlmMessage ToAssistantMessage(LlmResponse response)
+    {
+        if (response.ToolCalls.Count > 0)
+        {
+            return new LlmMessage("assistant", response.Content, ToolCalls: response.ToolCalls);
+        }
+
+        return new LlmMessage("assistant", response.Content);
+    }
 }

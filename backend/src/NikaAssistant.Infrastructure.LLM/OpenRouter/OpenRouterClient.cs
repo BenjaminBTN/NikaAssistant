@@ -1,12 +1,18 @@
 using Microsoft.Extensions.Configuration;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace NikaAssistant.Infrastructure.LLM.OpenRouter;
 
-public sealed class OpenRouterClient
+public sealed class OpenRouterClient : ILlmClient
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _model;
@@ -20,15 +26,23 @@ public sealed class OpenRouterClient
         _httpClient.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
     }
 
-    public async Task<string> ChatAsync(string message, CancellationToken cancellationToken = default)
+    public async Task<LlmResponse> CompleteAsync(
+        IReadOnlyList<LlmMessage> messages,
+        IReadOnlyList<LlmTool>? tools = null,
+        CancellationToken cancellationToken = default)
     {
-        var request = new ChatCompletionRequest(_model, new[] { new Message("user", message) });
+        var requestMessages = messages.Select(ToRequestMessage).ToArray();
+        var toolDefinitions = tools?.Select(ToToolDefinition).ToArray();
+
+        var request = new ChatCompletionRequest(_model, requestMessages, toolDefinitions);
+
+        var json = JsonSerializer.Serialize(request, JsonOptions);
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         httpRequest.Headers.Add("HTTP-Referer", "https://nika.local");
         httpRequest.Headers.Add("X-Title", "NikaAssistant");
-        httpRequest.Content = JsonContent.Create(request);
+        httpRequest.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
 
@@ -41,26 +55,83 @@ public sealed class OpenRouterClient
                 (System.Net.HttpStatusCode)429 => " Превышен лимит запросов (rate limit) — подождите и попробуйте снова.",
                 _ => string.Empty
             };
-            return $"Ошибка OpenRouter: {(int)response.StatusCode} {response.StatusCode}{hint} {errorBody}".Trim();
+            return new LlmResponse(
+                $"Ошибка OpenRouter: {(int)response.StatusCode} {response.StatusCode}{hint} {errorBody}".Trim(),
+                Array.Empty<LlmToolCall>());
         }
 
         var result = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(
-            cancellationToken: cancellationToken);
+            JsonOptions, cancellationToken);
 
-        return result?.Choices.FirstOrDefault()?.Message?.Content ?? string.Empty;
+        var message = result?.Choices.FirstOrDefault()?.Message;
+        var toolCalls = (message?.ToolCalls ?? Array.Empty<ResponseToolCall>())
+            .Select(t => new LlmToolCall(t.Id, t.Function.Name, t.Function.Arguments))
+            .ToArray();
+
+        return new LlmResponse(message?.Content, toolCalls);
     }
+
+    private static RequestMessage ToRequestMessage(LlmMessage message)
+    {
+        RequestToolCall[]? toolCalls = message.ToolCalls?
+            .Select(t => new RequestToolCall(t.Id, "function", new RequestFunction(t.Name, t.ArgumentsJson)))
+            .ToArray();
+
+        return new RequestMessage(message.Role, message.Content, message.ToolCallId, toolCalls);
+    }
+
+    private static ToolDefinition ToToolDefinition(LlmTool tool)
+    {
+        using var doc = JsonDocument.Parse(tool.ParametersJson);
+        return new ToolDefinition("function", new ToolFunction(tool.Name, tool.Description, doc.RootElement.Clone()));
+    }
+
+    private sealed record ChatCompletionRequest(
+        [property: JsonPropertyName("model")] string Model,
+        [property: JsonPropertyName("messages")] RequestMessage[] Messages,
+        [property: JsonPropertyName("tools")] ToolDefinition[]? Tools = null);
+
+    private sealed record RequestMessage(
+        [property: JsonPropertyName("role")] string Role,
+        [property: JsonPropertyName("content")] string? Content,
+        [property: JsonPropertyName("tool_call_id")] string? ToolCallId = null,
+        [property: JsonPropertyName("tool_calls")] RequestToolCall[]? ToolCalls = null);
+
+    private sealed record RequestToolCall(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("function")] RequestFunction Function);
+
+    private sealed record RequestFunction(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("arguments")] string Arguments);
+
+    private sealed record ToolDefinition(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("function")] ToolFunction Function);
+
+    private sealed record ToolFunction(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("description")] string Description,
+        [property: JsonPropertyName("parameters")] JsonElement Parameters);
+
+    private sealed record ChatCompletionResponse(
+        [property: JsonPropertyName("choices")] Choice[] Choices);
+
+    private sealed record Choice(
+        [property: JsonPropertyName("message")] ResponseMessage Message);
+
+    private sealed record ResponseMessage(
+        [property: JsonPropertyName("role")] string Role,
+        [property: JsonPropertyName("content")] string? Content,
+        [property: JsonPropertyName("tool_calls")] ResponseToolCall[]? ToolCalls);
+
+    private sealed record ResponseToolCall(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("function")] ResponseFunction Function);
+
+    private sealed record ResponseFunction(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("arguments")] string Arguments);
 }
-
-internal sealed record ChatCompletionRequest(
-    [property: JsonPropertyName("model")] string Model,
-    [property: JsonPropertyName("messages")] Message[] Messages);
-
-internal sealed record Message(
-    [property: JsonPropertyName("role")] string Role,
-    [property: JsonPropertyName("content")] string Content);
-
-internal sealed record ChatCompletionResponse(
-    [property: JsonPropertyName("choices")] Choice[] Choices);
-
-internal sealed record Choice(
-    [property: JsonPropertyName("message")] Message Message);
