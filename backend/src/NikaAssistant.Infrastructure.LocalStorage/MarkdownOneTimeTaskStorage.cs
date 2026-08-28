@@ -43,6 +43,30 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         return Task.CompletedTask;
     }
 
+    public Task DeleteAsync(DeleteTaskRequest request, CancellationToken cancellationToken = default)
+    {
+        lock (Sync)
+        {
+            if (!File.Exists(_filePath))
+            {
+                return Task.CompletedTask;
+            }
+
+            var row = $"| {request.Status} | {Escape(request.Task)} | {Escape(request.Assignee)} | {Escape(request.Comment)} |";
+
+            var lines = File.ReadAllLines(_filePath).ToList();
+            var index = lines.FindIndex(l => l.Equals(row, StringComparison.Ordinal));
+
+            if (index >= 0)
+            {
+                lines.RemoveAt(index);
+                File.WriteAllLines(_filePath, lines);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<OneTimeTask>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var tasks = new List<OneTimeTask>();

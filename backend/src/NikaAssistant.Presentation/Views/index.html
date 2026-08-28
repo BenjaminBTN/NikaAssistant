@@ -77,16 +77,17 @@
         <table class="w-full table-fixed text-left">
           <thead class="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th class="w-[40%] px-4 py-3 font-semibold">Задача</th>
-              <th class="w-[18%] px-4 py-3 font-semibold">Ответственный</th>
-              <th class="w-[10%] px-4 py-3 font-semibold">Статус</th>
-              <th class="w-[32%] px-4 py-3 font-semibold">Комментарий</th>
+              <th class="w-[37%] px-4 py-3 font-semibold">Задача</th>
+              <th class="w-[16%] px-4 py-3 font-semibold">Ответственный</th>
+              <th class="w-[8%] px-4 py-3 font-semibold">Статус</th>
+              <th class="w-[27%] px-4 py-3 font-semibold">Комментарий</th>
+              <th class="w-[12%] px-4 py-3 font-semibold">Действия</th>
             </tr>
           </thead>
           <tbody id="tasks-body">
-            <tr class="tasks-placeholder border-b border-slate-200">
-              <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="4">Загрузка задач…</td>
-            </tr>
+             <tr class="tasks-placeholder border-b border-slate-200">
+               <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="5">Загрузка задач…</td>
+             </tr>
           </tbody>
         </table>
       </div>
@@ -290,11 +291,50 @@
         commentCell.className = "px-4 py-4 align-top text-sm text-slate-700";
         commentCell.textContent = t.comment || "";
 
+        var actionCell = document.createElement("td");
+        actionCell.className = "px-2 py-4 align-top";
+        var deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 whitespace-nowrap";
+        deleteBtn.textContent = "Удалить";
+        deleteBtn.addEventListener("click", function () {
+          deleteTask(t, tr);
+        });
+        actionCell.appendChild(deleteBtn);
+
         tr.appendChild(taskCell);
         tr.appendChild(assigneeCell);
         tr.appendChild(statusCell);
         tr.appendChild(commentCell);
+        tr.appendChild(actionCell);
         return tr;
+      }
+
+      async function deleteTask(t, row) {
+        if (!confirm("Удалить задачу «" + (t.task || "") + "»?")) return;
+
+        var payload = {
+          status: t.status || "",
+          task: t.task || "",
+          assignee: t.assignee || "",
+          comment: t.comment || ""
+        };
+
+        try {
+          var res = await fetch("/DeleteTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            if (row && row.parentNode) row.parentNode.removeChild(row);
+          } else {
+            alert("Не удалось удалить задачу");
+          }
+        } catch (err) {
+          alert("Ошибка при удалении задачи");
+        }
       }
 
       function clearPlaceholder(tbody) {
@@ -328,7 +368,7 @@
           tbody.innerHTML = "";
 
           if (tasks.length === 0) {
-            tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="4">Нет задач</td></tr>';
+            tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="5">Нет задач</td></tr>';
             return;
           }
 

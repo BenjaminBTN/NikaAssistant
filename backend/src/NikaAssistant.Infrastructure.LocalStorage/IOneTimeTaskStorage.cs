@@ -6,5 +6,7 @@ public interface IOneTimeTaskStorage
 {
     Task AddAsync(AddTaskRequest request, CancellationToken cancellationToken = default);
 
+    Task DeleteAsync(DeleteTaskRequest request, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<OneTimeTask>> GetAllAsync(CancellationToken cancellationToken = default);
 }

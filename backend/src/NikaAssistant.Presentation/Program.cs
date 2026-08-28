@@ -1,5 +1,6 @@
 using NikaAssistant.Application.Chat;
 using NikaAssistant.Application.CreateTask;
+using NikaAssistant.Application.DeleteTask;
 using NikaAssistant.Application.GetTask;
 using NikaAssistant.Contracts;
 using NikaAssistant.Infrastructure.LLM;
@@ -14,6 +15,7 @@ builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenRouterCli
 builder.Services.AddSingleton<IOneTimeTaskStorage, MarkdownOneTimeTaskStorage>();
 builder.Services.AddScoped<AddTaskHandler>();
 builder.Services.AddScoped<GetTaskHandler>();
+builder.Services.AddScoped<DeleteTaskHandler>();
 builder.Services.AddScoped<ChatService>();
 
 var app = builder.Build();
@@ -42,6 +44,12 @@ app.MapGet("/GetTasks", async (GetTaskHandler handler) =>
 {
     var tasks = await handler.GetTasksAll();
     return Results.Ok(tasks);
+});
+
+app.MapPost("/DeleteTask", async (DeleteTaskRequest request, DeleteTaskHandler handler) =>
+{
+    await handler.DeleteTaskAsync(request);
+    return Results.Ok();
 });
 
 app.MapPost("/Chat", async (ChatRequest request, ChatService chatService) =>
