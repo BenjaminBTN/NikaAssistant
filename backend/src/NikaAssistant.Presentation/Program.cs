@@ -38,7 +38,7 @@ app.MapGet("/", (HttpContext http) =>
 app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler) =>
 {
     await handler.AddTaskAsync(request);
-    var created = new OneTimeTask("[ ]", request.Task, request.Assignee, request.Comment ?? "");
+    var created = new OneTimeTask("[ ]", request.Task, request.Assignee, request.Comment ?? "", request.Tags ?? new List<string>());
     return Results.Ok(created);
 });
 

@@ -65,7 +65,7 @@ public sealed class ChatService
                 if (request is not null)
                 {
                     await _storage.AddAsync(request, cancellationToken);
-                    addedTasks.Add(new OneTimeTask("[ ]", request.Task, request.Assignee, request.Comment ?? ""));
+                    addedTasks.Add(new OneTimeTask("[ ]", request.Task, request.Assignee, request.Comment ?? "", request.Tags ?? new List<string>()));
                     messages.Add(new LlmMessage("tool", $"Задача успешно добавлена: {request.Task}", call.Id));
                 }
                 else

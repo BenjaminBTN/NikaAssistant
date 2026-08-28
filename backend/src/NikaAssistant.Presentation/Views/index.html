@@ -67,11 +67,6 @@
             <h2 class="text-lg font-bold">Список задач</h2>
             <p class="mt-1 text-sm text-slate-500">Сначала срочное, затем зависшее и ожидания</p>
           </div>
-          <div class="flex gap-2">
-            <span class="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200">Срочно</span>
-            <span class="rounded-md bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700 ring-1 ring-orange-200">Зависло</span>
-            <span class="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200">Ожидание</span>
-          </div>
         </div>
 
         <table class="w-full table-fixed text-left">
@@ -80,14 +75,15 @@
               <th class="w-[10%] px-4 py-3 font-semibold">Статус</th>
               <th class="w-[34%] px-4 py-3 font-semibold">Задача</th>
               <th class="w-[16%] px-4 py-3 font-semibold">Ответственный</th>
-              <th class="w-[28%] px-4 py-3 font-semibold">Комментарий</th>
+              <th class="w-[14%] px-4 py-3 font-semibold">Теги</th>
+              <th class="w-[18%] px-4 py-3 font-semibold">Комментарий</th>
               <th class="w-[12%] px-4 py-3 font-semibold">Действия</th>
             </tr>
           </thead>
           <tbody id="tasks-body">
-             <tr class="tasks-placeholder border-b border-slate-200">
-               <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="5">Загрузка задач…</td>
-             </tr>
+              <tr class="tasks-placeholder border-b border-slate-200">
+                <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="6">Загрузка задач…</td>
+              </tr>
           </tbody>
         </table>
       </div>
@@ -182,6 +178,14 @@
           <input name="assignee" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
         </div>
         <div>
+          <label class="block text-sm font-medium text-slate-700">Теги</label>
+          <div id="task-tags" class="mt-1 flex flex-wrap gap-3">
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Срочно" /> Срочно</label>
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Зависло" /> Зависло</label>
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ожидание" /> Ожидание</label>
+          </div>
+        </div>
+        <div>
           <label class="block text-sm font-medium text-slate-700">Комментарий</label>
           <input name="comment" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
         </div>
@@ -229,10 +233,17 @@
       form.addEventListener("submit", async function (e) {
         e.preventDefault();
 
+        var tagInputs = form.querySelectorAll('input[name="tag"]');
+        var selectedTags = [];
+        tagInputs.forEach(function (cb) {
+          if (cb.checked) selectedTags.push(cb.value);
+        });
+
         var payload = {
           task: form.task.value.trim(),
           assignee: form.assignee.value.trim(),
-          comment: form.comment.value.trim()
+          comment: form.comment.value.trim(),
+          tags: selectedTags
         };
 
         try {
@@ -256,6 +267,7 @@
                 task: payload.task,
                 assignee: payload.assignee,
                 comment: payload.comment,
+                tags: payload.tags || [],
                 status: "[ ]"
               });
             } else if (window.loadTasks) {
@@ -275,6 +287,30 @@
         var div = document.createElement("div");
         div.textContent = value == null ? "" : String(value);
         return div.innerHTML;
+      }
+
+      var TAGS = [
+        { key: "Срочно", cls: "bg-red-50 text-red-700 ring-red-200" },
+        { key: "Зависло", cls: "bg-orange-50 text-orange-700 ring-orange-200" },
+        { key: "Ожидание", cls: "bg-blue-50 text-blue-700 ring-blue-200" }
+      ];
+
+      function getTaskTags(t) {
+        if (Array.isArray(t.tags)) return t.tags;
+        if (typeof t.tags === "string" && t.tags) return t.tags.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+        return [];
+      }
+
+      function renderTags(container, tags) {
+        container.innerHTML = "";
+        tags.forEach(function (tag) {
+          var found = TAGS.filter(function (x) { return x.key === tag; })[0];
+          if (!found) return;
+          var span = document.createElement("span");
+          span.className = "rounded-md px-2.5 py-1 text-xs font-medium ring-1 " + found.cls;
+          span.textContent = found.key;
+          container.appendChild(span);
+        });
       }
 
       function createTaskRow(t) {
@@ -304,6 +340,40 @@
         assigneeCell.className = "px-4 py-4 align-top";
         assigneeCell.innerHTML = '<div class="font-medium">' + escapeHtml(t.assignee) + '</div>';
 
+        var tagsCell = document.createElement("td");
+        tagsCell.className = "px-4 py-4 align-top";
+        var tagsWrap = document.createElement("div");
+        var tagsView = document.createElement("div");
+        tagsView.className = "tags-view flex flex-wrap gap-1 min-h-[1.25rem]";
+        renderTags(tagsView, getTaskTags(t));
+        var details = document.createElement("details");
+        details.className = "group relative mt-2";
+        var summary = document.createElement("summary");
+        summary.className = "list-none cursor-pointer select-none text-xs text-slate-500 hover:text-slate-900";
+        summary.textContent = "Изменить ▾";
+        var menu = document.createElement("div");
+        menu.className = "absolute z-10 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-2 shadow-lg";
+        TAGS.forEach(function (tag) {
+          var label = document.createElement("label");
+          label.className = "flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50";
+          var cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.name = "row-tag";
+          cb.value = tag.key;
+          cb.checked = getTaskTags(t).indexOf(tag.key) !== -1;
+          cb.addEventListener("change", function () {
+            updateTags(t, tr);
+          });
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(tag.key));
+          menu.appendChild(label);
+        });
+        details.appendChild(summary);
+        details.appendChild(menu);
+        tagsWrap.appendChild(tagsView);
+        tagsWrap.appendChild(details);
+        tagsCell.appendChild(tagsWrap);
+
         var commentCell = document.createElement("td");
         commentCell.className = "px-4 py-4 align-top text-sm text-slate-700";
         commentCell.textContent = t.comment || "";
@@ -322,6 +392,7 @@
         tr.appendChild(statusCell);
         tr.appendChild(taskCell);
         tr.appendChild(assigneeCell);
+        tr.appendChild(tagsCell);
         tr.appendChild(commentCell);
         tr.appendChild(actionCell);
         return tr;
@@ -354,7 +425,8 @@
               task: t.task,
               assignee: t.assignee,
               comment: t.comment,
-              newStatus: newStatus
+              newStatus: newStatus,
+              newTags: getTaskTags(t)
             })
           });
 
@@ -367,6 +439,43 @@
         } catch (err) {
           renderStatus(checkBtn, taskTitleEl, wasDone);
           alert("Ошибка при обновлении статуса");
+        }
+      }
+
+      async function updateTags(t, tr) {
+        var details = tr.querySelector("details");
+        var selected = [];
+        details.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+          if (cb.checked) selected.push(cb.value);
+        });
+
+        var tagsView = tr.querySelector(".tags-view");
+        var optimistic = selected.slice();
+        renderTags(tagsView, optimistic);
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: t.assignee,
+              comment: t.comment,
+              newStatus: t.status,
+              newTags: selected
+            })
+          });
+
+          if (res.ok) {
+            t.tags = selected;
+          } else {
+            renderTags(tagsView, getTaskTags(t));
+            alert("Не удалось обновить теги");
+          }
+        } catch (err) {
+          renderTags(tagsView, getTaskTags(t));
+          alert("Ошибка при обновлении тегов");
         }
       }
 
@@ -428,7 +537,7 @@
           tbody.innerHTML = "";
 
           if (tasks.length === 0) {
-            tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="5">Нет задач</td></tr>';
+            tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="6">Нет задач</td></tr>';
             return;
           }
 
@@ -441,6 +550,14 @@
       };
 
       window.addEventListener("load", window.loadTasks);
+
+      document.addEventListener("click", function (e) {
+        document.querySelectorAll("details[open]").forEach(function (d) {
+          if (!d.contains(e.target)) {
+            d.removeAttribute("open");
+          }
+        });
+      });
     })();
 
     (function () {
