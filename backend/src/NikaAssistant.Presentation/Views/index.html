@@ -376,7 +376,7 @@
 
         var commentCell = document.createElement("td");
         commentCell.className = "px-4 py-4 align-top text-sm text-slate-700";
-        commentCell.textContent = t.comment || "";
+        renderComment(commentCell, t);
 
         var actionCell = document.createElement("td");
         actionCell.className = "px-2 py-4 align-top";
@@ -476,6 +476,85 @@
         } catch (err) {
           renderTags(tagsView, getTaskTags(t));
           alert("Ошибка при обновлении тегов");
+        }
+      }
+
+      function renderComment(cell, t) {
+        cell.innerHTML = "";
+        var view = document.createElement("div");
+        view.className = "comment-view cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem]";
+        view.textContent = t.comment || "";
+        view.title = "Нажмите, чтобы изменить комментарий";
+        view.addEventListener("click", function () {
+          beginCommentEdit(t, cell, view);
+        });
+        cell.appendChild(view);
+      }
+
+      function beginCommentEdit(t, cell, view) {
+        if (cell.querySelector("textarea")) return;
+
+        var textarea = document.createElement("textarea");
+        textarea.className = "w-full resize-none rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.rows = Math.max(2, (t.comment || "").split("\n").length);
+        textarea.value = t.comment || "";
+        cell.replaceChild(textarea, view);
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+        var finished = false;
+        function commit(save) {
+          if (finished) return;
+          finished = true;
+          var newValue = textarea.value;
+          if (save && newValue !== (t.comment || "")) {
+            updateComment(t, cell, newValue);
+          } else {
+            renderComment(cell, t);
+          }
+        }
+
+        textarea.addEventListener("blur", function () { commit(true); });
+        textarea.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            textarea.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            commit(false);
+          }
+        });
+      }
+
+      async function updateComment(t, cell, newComment) {
+        var previous = t.comment;
+        t.comment = newComment;
+        renderComment(cell, t);
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: t.assignee,
+              comment: previous,
+              newStatus: t.status,
+              newTags: getTaskTags(t),
+              newComment: newComment
+            })
+          });
+
+          if (!res.ok) {
+            t.comment = previous;
+            renderComment(cell, t);
+            alert("Не удалось обновить комментарий");
+          }
+        } catch (err) {
+          t.comment = previous;
+          renderComment(cell, t);
+          alert("Ошибка при обновлении комментария");
         }
       }
 

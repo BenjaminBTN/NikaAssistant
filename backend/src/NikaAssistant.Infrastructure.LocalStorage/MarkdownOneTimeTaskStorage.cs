@@ -113,6 +113,10 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var cells = lines[index].Split('|');
             cells[1] = " " + request.NewStatus + " ";
             cells[4] = " " + newTags + " ";
+            if (request.NewComment != null)
+            {
+                cells[5] = " " + Escape(request.NewComment) + " ";
+            }
             lines[index] = string.Join("|", cells);
             File.WriteAllLines(_filePath, lines);
         }
