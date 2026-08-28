@@ -38,7 +38,7 @@ public sealed class ChatService
         _storage = storage;
     }
 
-    public async Task<string> AskAsync(string message, CancellationToken cancellationToken = default)
+    public async Task<ChatResult> AskAsync(string message, CancellationToken cancellationToken = default)
     {
         var messages = new List<LlmMessage>
         {
@@ -49,11 +49,13 @@ public sealed class ChatService
         if (!LooksLikeTaskRequest(message))
         {
             var plain = await _llm.CompleteAsync(messages, null, cancellationToken);
-            return plain.Content ?? string.Empty;
+            return new ChatResult(plain.Content ?? string.Empty, Array.Empty<OneTimeTask>());
         }
 
         var response = await _llm.CompleteAsync(messages, new[] { AddTaskTool }, cancellationToken);
         messages.Add(ToAssistantMessage(response));
+
+        var addedTasks = new List<OneTimeTask>();
 
         foreach (var call in response.ToolCalls)
         {
@@ -63,6 +65,7 @@ public sealed class ChatService
                 if (request is not null)
                 {
                     await _storage.AddAsync(request, cancellationToken);
+                    addedTasks.Add(new OneTimeTask("[ ]", request.Task, request.Assignee, request.Comment ?? ""));
                     messages.Add(new LlmMessage("tool", $"Задача успешно добавлена: {request.Task}", call.Id));
                 }
                 else
@@ -75,10 +78,10 @@ public sealed class ChatService
         if (response.ToolCalls.Count > 0)
         {
             var final = await _llm.CompleteAsync(messages, null, cancellationToken);
-            return final.Content ?? string.Empty;
+            return new ChatResult(final.Content ?? string.Empty, addedTasks);
         }
 
-        return response.Content ?? string.Empty;
+        return new ChatResult(response.Content ?? string.Empty, addedTasks);
     }
 
     private static bool LooksLikeTaskRequest(string message) =>
@@ -94,3 +97,5 @@ public sealed class ChatService
         return new LlmMessage("assistant", response.Content);
     }
 }
+
+public sealed record ChatResult(string Answer, IReadOnlyList<OneTimeTask> AddedTasks);

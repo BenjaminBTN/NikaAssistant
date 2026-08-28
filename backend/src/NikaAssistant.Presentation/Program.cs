@@ -23,8 +23,10 @@ if(app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.MapGet("/", () =>
+app.MapGet("/", (HttpContext http) =>
 {
+    http.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+    http.Response.Headers.Pragma = "no-cache";
     var filePath = Path.Combine(app.Environment.ContentRootPath, "Views", "index.html");
     return Results.File(filePath, "text/html");
 });
@@ -32,7 +34,8 @@ app.MapGet("/", () =>
 app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler) =>
 {
     await handler.AddTaskAsync(request);
-    return Results.Ok(new { success = true });
+    var created = new OneTimeTask("[ ]", request.Task, request.Assignee, request.Comment ?? "");
+    return Results.Ok(created);
 });
 
 app.MapGet("/GetTasks", async (GetTaskHandler handler) =>
@@ -49,7 +52,7 @@ app.MapPost("/Chat", async (ChatRequest request, ChatService chatService) =>
     }
 
     var answer = await chatService.AskAsync(request.Message);
-    return Results.Ok(new { answer });
+    return Results.Ok(new { answer = answer.Answer, addedTasks = answer.AddedTasks });
 });
 
 app.Run();

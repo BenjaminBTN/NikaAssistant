@@ -4,6 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1440">
   <title>Проблемы дня - прототип</title>
+  <style>
+    @keyframes taskRowFlash {
+      0% { background-color: #ecfdf5; }
+      100% { background-color: transparent; }
+    }
+    .task-row-new {
+      animation: taskRowFlash 1.5s ease-out;
+    }
+  </style>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -75,7 +84,7 @@
             </tr>
           </thead>
           <tbody id="tasks-body">
-            <tr class="border-b border-slate-200">
+            <tr class="tasks-placeholder border-b border-slate-200">
               <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="4">Загрузка задач…</td>
             </tr>
           </tbody>
@@ -228,8 +237,22 @@
           if (res.ok) {
             form.reset();
             hideModal();
-            alert("Задача добавлена");
-            if (window.loadTasks) window.loadTasks();
+
+            var created = null;
+            try { created = await res.json(); } catch (e) { created = null; }
+
+            if (created && window.appendTask) {
+              window.appendTask(created);
+            } else if (window.appendTask) {
+              window.appendTask({
+                task: payload.task,
+                assignee: payload.assignee,
+                comment: payload.comment,
+                status: "[ ]"
+              });
+            } else if (window.loadTasks) {
+              window.loadTasks();
+            }
           } else {
             alert("Не удалось добавить задачу");
           }
@@ -246,6 +269,52 @@
         return div.innerHTML;
       }
 
+      function createTaskRow(t) {
+        var done = (t.status || "").indexOf("x") !== -1;
+        var tr = document.createElement("tr");
+        tr.className = "border-b border-slate-200";
+
+        var taskCell = document.createElement("td");
+        taskCell.className = "px-4 py-4 align-top";
+        taskCell.innerHTML = '<div class="font-semibold text-slate-950">' + escapeHtml(t.task) + '</div>';
+
+        var assigneeCell = document.createElement("td");
+        assigneeCell.className = "px-4 py-4 align-top";
+        assigneeCell.innerHTML = '<div class="font-medium">' + escapeHtml(t.assignee) + '</div>';
+
+        var statusCell = document.createElement("td");
+        statusCell.className = "px-4 py-4 align-top";
+        statusCell.innerHTML = '<input type="checkbox" disabled' + (done ? " checked" : "") + '>';
+
+        var commentCell = document.createElement("td");
+        commentCell.className = "px-4 py-4 align-top text-sm text-slate-700";
+        commentCell.textContent = t.comment || "";
+
+        tr.appendChild(taskCell);
+        tr.appendChild(assigneeCell);
+        tr.appendChild(statusCell);
+        tr.appendChild(commentCell);
+        return tr;
+      }
+
+      function clearPlaceholder(tbody) {
+        var placeholder = tbody.querySelector(".tasks-placeholder");
+        if (placeholder) placeholder.remove();
+      }
+
+      window.appendTask = function (t) {
+        var tbody = document.getElementById("tasks-body");
+        if (!tbody || !t) return;
+        clearPlaceholder(tbody);
+        var row = createTaskRow(t);
+        row.classList.add("task-row-new");
+        tbody.appendChild(row);
+        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        setTimeout(function () {
+          row.classList.remove("task-row-new");
+        }, 1500);
+      };
+
       window.loadTasks = async function () {
         var tbody = document.getElementById("tasks-body");
         if (!tbody) return;
@@ -259,36 +328,12 @@
           tbody.innerHTML = "";
 
           if (tasks.length === 0) {
-            tbody.innerHTML = '<tr class="border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="4">Нет задач</td></tr>';
+            tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="4">Нет задач</td></tr>';
             return;
           }
 
           tasks.forEach(function (t) {
-            var done = (t.status || "").indexOf("x") !== -1;
-            var tr = document.createElement("tr");
-            tr.className = "border-b border-slate-200";
-
-            var taskCell = document.createElement("td");
-            taskCell.className = "px-4 py-4 align-top";
-            taskCell.innerHTML = '<div class="font-semibold text-slate-950">' + escapeHtml(t.task) + '</div>';
-
-            var assigneeCell = document.createElement("td");
-            assigneeCell.className = "px-4 py-4 align-top";
-            assigneeCell.innerHTML = '<div class="font-medium">' + escapeHtml(t.assignee) + '</div>';
-
-            var statusCell = document.createElement("td");
-            statusCell.className = "px-4 py-4 align-top";
-            statusCell.innerHTML = '<input type="checkbox" disabled' + (done ? " checked" : "") + '>';
-
-            var commentCell = document.createElement("td");
-            commentCell.className = "px-4 py-4 align-top text-sm text-slate-700";
-            commentCell.textContent = t.comment || "";
-
-            tr.appendChild(taskCell);
-            tr.appendChild(assigneeCell);
-            tr.appendChild(statusCell);
-            tr.appendChild(commentCell);
-            tbody.appendChild(tr);
+            tbody.appendChild(createTaskRow(t));
           });
         } catch (e) {
           // оставляем заглушку при ошибке
@@ -353,6 +398,12 @@
           if (res.ok) {
             var data = await res.json();
             last.textContent = data.answer || "(пустой ответ)";
+
+            if (Array.isArray(data.addedTasks) && data.addedTasks.length > 0 && window.appendTask) {
+              data.addedTasks.forEach(function (t) {
+                window.appendTask(t);
+              });
+            }
           } else {
             last.textContent = "Ошибка при получении ответа";
           }
