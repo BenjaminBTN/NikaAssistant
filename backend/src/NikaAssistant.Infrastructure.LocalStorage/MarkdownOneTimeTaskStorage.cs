@@ -6,14 +6,17 @@ namespace NikaAssistant.Infrastructure.LocalStorage;
 public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 {
     private const string DefaultFilePath = @"C:\Users\galki\Storage\Tasks\OneTime\one-time-tasks.md";
+    private const string DefaultArchivePath = @"C:\Users\galki\Storage\Tasks\Archive\archive-tasks.md";
     private static readonly object Sync = new();
 
     private readonly string _filePath;
+    private readonly string _archivePath;
     private readonly string? _defaultAssignee;
 
     public MarkdownOneTimeTaskStorage(IConfiguration configuration)
     {
         _filePath = configuration["Storage:OneTimeTasksPath"] ?? DefaultFilePath;
+        _archivePath = configuration["Storage:ArchivePath"] ?? DefaultArchivePath;
         _defaultAssignee = configuration["Storage:DefaultAssignee"];
     }
 
@@ -46,6 +49,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 File.WriteAllText(_filePath, header);
             }
 
+            EnsureTrailingNewline(_filePath);
             File.AppendAllText(_filePath, row + Environment.NewLine);
         }
 
@@ -76,8 +80,10 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
             if (index >= 0)
             {
+                var archived = lines[index];
                 lines.RemoveAt(index);
                 File.WriteAllLines(_filePath, lines);
+                AppendToArchive(archived);
             }
         }
 
@@ -116,22 +122,11 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 ? parsed.Tags
                 : string.Join(", ", request.NewTags.Select(Escape));
 
-            var cells = lines[index].Split('|');
-            cells[1] = " " + request.NewStatus + " ";
-            cells[4] = " " + newTags + " ";
-            if (request.NewTask != null)
-            {
-                cells[2] = " " + Escape(request.NewTask) + " ";
-            }
-            if (request.NewAssignee != null)
-            {
-                cells[3] = " " + Escape(request.NewAssignee) + " ";
-            }
-            if (request.NewComment != null)
-            {
-                cells[5] = " " + Escape(request.NewComment) + " ";
-            }
-            lines[index] = string.Join("|", cells);
+            var newTask = request.NewTask ?? parsed.Task;
+            var newAssignee = request.NewAssignee ?? parsed.Assignee;
+            var newComment = request.NewComment ?? parsed.Comment;
+
+            lines[index] = BuildRow(request.NewStatus, newTask, newAssignee, newTags, newComment);
             File.WriteAllLines(_filePath, lines);
         }
 
@@ -283,6 +278,42 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     {
         var cells = line.Split('|');
         return Math.Max(0, cells.Length - 2);
+    }
+
+    private void AppendToArchive(string row)
+    {
+        var directory = Path.GetDirectoryName(_archivePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        if (!File.Exists(_archivePath))
+        {
+            var header =
+                "# Архив задач" + Environment.NewLine + Environment.NewLine +
+                "| Статус | Задача | Ответственный | Теги | Комментарий |" + Environment.NewLine +
+                "| --- | --- | --- | --- | --- |" + Environment.NewLine;
+
+            File.WriteAllText(_archivePath, header);
+        }
+
+        EnsureTrailingNewline(_archivePath);
+        File.AppendAllText(_archivePath, row + Environment.NewLine);
+    }
+
+    private static void EnsureTrailingNewline(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            return;
+        }
+
+        var content = File.ReadAllText(filePath);
+        if (content.Length > 0 && !content.EndsWith(Environment.NewLine, StringComparison.Ordinal))
+        {
+            File.AppendAllText(filePath, Environment.NewLine);
+        }
     }
 
     private static string BuildRow(string status, string task, string assignee, string tags, string? comment) =>
