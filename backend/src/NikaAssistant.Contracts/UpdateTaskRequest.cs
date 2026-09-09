@@ -1,3 +1,3 @@
 namespace NikaAssistant.Contracts;
 
-public sealed record UpdateTaskRequest(string Status, string Task, string Assignee, string Comment, string NewStatus, List<string>? NewTags = null, string? NewComment = null);
+public sealed record UpdateTaskRequest(string Status, string Task, string Assignee, string Comment, string NewStatus, List<string>? NewTags = null, string? NewComment = null, string? NewTask = null, string? NewAssignee = null);

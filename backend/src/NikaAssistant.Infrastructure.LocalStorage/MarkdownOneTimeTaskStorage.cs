@@ -119,6 +119,14 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var cells = lines[index].Split('|');
             cells[1] = " " + request.NewStatus + " ";
             cells[4] = " " + newTags + " ";
+            if (request.NewTask != null)
+            {
+                cells[2] = " " + Escape(request.NewTask) + " ";
+            }
+            if (request.NewAssignee != null)
+            {
+                cells[3] = " " + Escape(request.NewAssignee) + " ";
+            }
             if (request.NewComment != null)
             {
                 cells[5] = " " + Escape(request.NewComment) + " ";

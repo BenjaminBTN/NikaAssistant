@@ -31,7 +31,6 @@
           <div id="today-date" class="text-sm font-semibold">—</div>
         </div>
         <button id="add-task-btn" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Добавить задачу</button>
-        <button class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Разобрать письмо</button>
       </div>
     </div>
   </header>
@@ -424,11 +423,11 @@
 
         var taskCell = document.createElement("td");
         taskCell.className = "px-4 py-4 align-top";
-        taskCell.innerHTML = '<div class="font-semibold text-slate-950' + (done ? " line-through text-slate-400" : "") + '">' + escapeHtml(t.task) + '</div>';
+        renderTaskName(taskCell, t);
 
         var assigneeCell = document.createElement("td");
         assigneeCell.className = "px-4 py-4 align-top";
-        assigneeCell.innerHTML = '<div class="font-medium">' + escapeHtml(t.assignee) + '</div>';
+        renderAssignee(assigneeCell, t);
 
         var tagsCell = document.createElement("td");
         tagsCell.className = "px-4 py-4 text-center align-top";
@@ -513,6 +512,173 @@
         return tr;
       }
 
+      function renderTaskName(cell, t) {
+        cell.innerHTML = "";
+        var done = (t.status || "").indexOf("x") !== -1;
+        var view = document.createElement("div");
+        view.className = "task-title cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-base font-normal leading-snug text-slate-900" +
+          (done ? " line-through text-slate-400" : "");
+        view.textContent = t.task || "";
+        view.title = "Нажмите, чтобы изменить задачу";
+        view.addEventListener("click", function () {
+          beginTaskNameEdit(t, cell, view);
+        });
+        cell.appendChild(view);
+      }
+
+      function beginTaskNameEdit(t, cell, view) {
+        if (cell.querySelector("textarea")) return;
+
+        var textarea = document.createElement("textarea");
+        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-base font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.value = t.task || "";
+        cell.replaceChild(textarea, view);
+        autoGrow(textarea);
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+        var finished = false;
+        function commit(save) {
+          if (finished) return;
+          finished = true;
+          var newValue = textarea.value;
+          if (save && newValue !== (t.task || "")) {
+            updateTaskName(t, cell, newValue);
+          } else {
+            renderTaskName(cell, t);
+          }
+        }
+
+        textarea.addEventListener("input", function () { autoGrow(textarea); });
+        textarea.addEventListener("blur", function () { commit(true); });
+        textarea.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            textarea.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            commit(false);
+          }
+        });
+      }
+
+      function autoGrow(textarea) {
+        textarea.style.height = "auto";
+        textarea.style.height = textarea.scrollHeight + "px";
+      }
+
+      async function updateTaskName(t, cell, newValue) {
+        var previous = t.task;
+        t.task = newValue;
+        renderTaskName(cell, t);
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: previous,
+              assignee: t.assignee,
+              comment: t.comment,
+              newStatus: t.status,
+              newTags: getTaskTags(t),
+              newTask: newValue
+            })
+          });
+
+          if (!res.ok) {
+            t.task = previous;
+            renderTaskName(cell, t);
+            alert("Не удалось обновить задачу");
+          }
+        } catch (err) {
+          t.task = previous;
+          renderTaskName(cell, t);
+          alert("Ошибка при обновлении задачи");
+        }
+      }
+
+      function renderAssignee(cell, t) {
+        cell.innerHTML = "";
+        var view = document.createElement("div");
+        view.className = "assignee-name cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-base font-normal leading-snug text-slate-900";
+        view.textContent = t.assignee || "";
+        view.title = "Нажмите, чтобы изменить ответственного";
+        view.addEventListener("click", function () {
+          beginAssigneeEdit(t, cell, view);
+        });
+        cell.appendChild(view);
+      }
+
+      function beginAssigneeEdit(t, cell, view) {
+        if (cell.querySelector("textarea")) return;
+
+        var textarea = document.createElement("textarea");
+        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-base font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.value = t.assignee || "";
+        cell.replaceChild(textarea, view);
+        autoGrow(textarea);
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+        var finished = false;
+        function commit(save) {
+          if (finished) return;
+          finished = true;
+          var newValue = textarea.value;
+          if (save && newValue !== (t.assignee || "")) {
+            updateAssignee(t, cell, newValue);
+          } else {
+            renderAssignee(cell, t);
+          }
+        }
+
+        textarea.addEventListener("input", function () { autoGrow(textarea); });
+        textarea.addEventListener("blur", function () { commit(true); });
+        textarea.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            textarea.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            commit(false);
+          }
+        });
+      }
+
+      async function updateAssignee(t, cell, newValue) {
+        var previous = t.assignee;
+        t.assignee = newValue;
+        renderAssignee(cell, t);
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: previous,
+              comment: t.comment,
+              newStatus: t.status,
+              newTags: getTaskTags(t),
+              newAssignee: newValue
+            })
+          });
+
+          if (!res.ok) {
+            t.assignee = previous;
+            renderAssignee(cell, t);
+            alert("Не удалось обновить ответственного");
+          }
+        } catch (err) {
+          t.assignee = previous;
+          renderAssignee(cell, t);
+          alert("Ошибка при обновлении ответственного");
+        }
+      }
+
       function renderStatus(checkBtn, taskEl, done) {
         checkBtn.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors " +
           (done
@@ -527,7 +693,7 @@
       async function toggleStatus(t, checkBtn, tr) {
         var wasDone = (t.status || "").indexOf("x") !== -1;
         var newStatus = wasDone ? "[ ]" : "[x]";
-        var taskTitleEl = tr.querySelector(".font-semibold");
+        var taskTitleEl = tr.querySelector(".task-title");
 
         renderStatus(checkBtn, taskTitleEl, !wasDone);
 
@@ -600,7 +766,7 @@
       function renderComment(cell, t) {
         cell.innerHTML = "";
         var view = document.createElement("div");
-        view.className = "comment-view cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem]";
+        view.className = "comment-view cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm leading-snug text-slate-700";
         view.textContent = t.comment || "";
         view.title = "Нажмите, чтобы изменить комментарий";
         view.addEventListener("click", function () {
@@ -613,10 +779,10 @@
         if (cell.querySelector("textarea")) return;
 
         var textarea = document.createElement("textarea");
-        textarea.className = "w-full resize-none rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-slate-950 focus:outline-none";
-        textarea.rows = Math.max(2, (t.comment || "").split("\n").length);
+        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm leading-snug font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
         textarea.value = t.comment || "";
         cell.replaceChild(textarea, view);
+        autoGrow(textarea);
         textarea.focus();
         textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 
@@ -632,6 +798,7 @@
           }
         }
 
+        textarea.addEventListener("input", function () { autoGrow(textarea); });
         textarea.addEventListener("blur", function () { commit(true); });
         textarea.addEventListener("keydown", function (e) {
           if (e.key === "Enter" && !e.shiftKey) {
