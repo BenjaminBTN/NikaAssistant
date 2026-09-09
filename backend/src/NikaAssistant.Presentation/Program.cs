@@ -59,6 +59,9 @@ app.MapGet("/GetTasks", async (GetTaskHandler handler) =>
     return Results.Ok(tasks);
 });
 
+app.MapGet("/Config", () =>
+    Results.Ok(new { defaultAssignee = builder.Configuration["Storage:DefaultAssignee"] ?? "" }));
+
 app.MapPost("/DeleteTask", async (DeleteTaskRequest request, DeleteTaskHandler handler) =>
 {
     await handler.DeleteTaskAsync(request);

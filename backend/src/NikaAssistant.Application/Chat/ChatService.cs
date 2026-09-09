@@ -11,7 +11,7 @@ public sealed class ChatService
     private static readonly JsonSerializerOptions JsonOptions = JsonSerializerOptions.Web;
 
     private const string SystemPrompt =
-        "Ты — помощник Nika. Общайся на русском. Инструмент add_task вызывай СТРОГО только когда пользователь явно просит добавить, создать или записать задачу. Во всех остальных случаях (вопросы, болтовня, уточнения) просто отвечай текстом и никаких задач не создавай.";
+        "Ты — помощница Ника. Общайся на русском. Инструмент add_task вызывай СТРОГО только когда пользователь явно просит добавить, создать или записать задачу. Во всех остальных случаях (вопросы, болтовня, уточнения) просто отвечай текстом и никаких задач не создавай.";
 
     private const string HistoryKey = "chat_history";
     private const int MaxHistoryMessages = 40;

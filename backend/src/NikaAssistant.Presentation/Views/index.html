@@ -38,24 +38,24 @@
 
   <main class="mx-auto w-[1280px] px-8 py-8">
     <section class="grid grid-cols-4 gap-4">
-      <div class="rounded-lg border border-red-200 bg-red-50 p-5">
+      <div id="card-urgent" class="cursor-pointer rounded-lg border border-red-200 bg-red-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Срочно</div>
-        <div class="mt-2 text-4xl font-bold text-slate-950">2</div>
+        <div id="count-urgent" class="mt-2 text-4xl font-bold text-slate-950">0</div>
         <div class="mt-2 text-sm text-slate-600">Требуют действия сейчас</div>
       </div>
-      <div class="rounded-lg border border-orange-200 bg-orange-50 p-5">
+      <div id="card-stuck" class="cursor-pointer rounded-lg border border-orange-200 bg-orange-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Зависло</div>
-        <div class="mt-2 text-4xl font-bold text-slate-950">2</div>
+        <div id="count-stuck" class="mt-2 text-4xl font-bold text-slate-950">0</div>
         <div class="mt-2 text-sm text-slate-600">Нужно подтолкнуть участника</div>
       </div>
-      <div class="rounded-lg border border-blue-200 bg-blue-50 p-5">
+      <div id="card-waiting" class="cursor-pointer rounded-lg border border-blue-200 bg-blue-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Ожидание ответа</div>
-        <div class="mt-2 text-4xl font-bold text-slate-950">1</div>
+        <div id="count-waiting" class="mt-2 text-4xl font-bold text-slate-950">0</div>
         <div class="mt-2 text-sm text-slate-600">Письма, подрядчики, HR</div>
       </div>
-      <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-5">
+      <div id="card-control" class="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">На контроле</div>
-        <div class="mt-2 text-4xl font-bold text-slate-950">5</div>
+        <div id="count-control" class="mt-2 text-4xl font-bold text-slate-950">0</div>
         <div class="mt-2 text-sm text-slate-600">Проверить статус у ответственных</div>
       </div>
     </section>
@@ -72,12 +72,12 @@
         <table class="w-full table-fixed text-left">
           <thead class="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th class="w-[10%] px-4 py-3 font-semibold">Статус</th>
+              <th class="w-[10%] px-4 py-3 text-center font-semibold">Статус</th>
               <th class="w-[34%] px-4 py-3 font-semibold">Задача</th>
               <th class="w-[16%] px-4 py-3 font-semibold">Ответственный</th>
-              <th class="w-[14%] px-4 py-3 font-semibold">Теги</th>
+              <th class="w-[14%] px-4 py-3 text-center font-semibold">Теги</th>
               <th class="w-[18%] px-4 py-3 font-semibold">Комментарий</th>
-              <th class="w-[12%] px-4 py-3 font-semibold">Действия</th>
+              <th class="w-[12%] px-4 py-3 text-center font-semibold">Действия</th>
             </tr>
           </thead>
           <tbody id="tasks-body">
@@ -301,6 +301,111 @@
         return [];
       }
 
+      var allTasks = [];
+      var defaultAssignee = "";
+      var currentFilter = null;
+
+      function isDone(t) {
+        return (t.status || "").toLowerCase().indexOf("x") !== -1;
+      }
+
+      function taskMatches(t, type) {
+        if (isDone(t)) return false;
+        var tags = getTaskTags(t);
+        if (type === "urgent") return tags.indexOf("Срочно") !== -1;
+        if (type === "stuck") return tags.indexOf("Зависло") !== -1;
+        if (type === "waiting") return tags.indexOf("Ожидание") !== -1 || tags.indexOf("Ожидание ответа") !== -1;
+        if (type === "control") {
+          var def = (defaultAssignee || "").trim().toLowerCase();
+          var assignee = (t.assignee || "").trim().toLowerCase();
+          return def && assignee !== def;
+        }
+        return false;
+      }
+
+      function setCount(id, value) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = value;
+      }
+
+      function updateSummary() {
+        var counts = { urgent: 0, stuck: 0, waiting: 0, control: 0 };
+
+        allTasks.forEach(function (t) {
+          if (isDone(t)) return;
+          if (taskMatches(t, "urgent")) counts.urgent++;
+          if (taskMatches(t, "stuck")) counts.stuck++;
+          if (taskMatches(t, "waiting")) counts.waiting++;
+          if (taskMatches(t, "control")) counts.control++;
+        });
+
+        setCount("count-urgent", counts.urgent);
+        setCount("count-stuck", counts.stuck);
+        setCount("count-waiting", counts.waiting);
+        setCount("count-control", counts.control);
+      }
+
+      var FILTER_TYPES = ["urgent", "stuck", "waiting", "control"];
+
+      function updateCards() {
+        FILTER_TYPES.forEach(function (type) {
+          var el = document.getElementById("card-" + type);
+          if (!el) return;
+          el.classList.remove("ring-2", "ring-slate-900", "ring-offset-2", "shadow-md");
+          el.style.filter = "";
+          if (currentFilter) {
+            if (currentFilter === type) {
+              el.classList.add("ring-2", "ring-slate-900", "ring-offset-2", "shadow-md");
+            } else {
+              el.style.filter = "grayscale(1) opacity(0.55)";
+            }
+          }
+        });
+      }
+
+      function setFilter(type) {
+        currentFilter = (currentFilter === type) ? null : type;
+        updateCards();
+        renderTasks();
+      }
+
+      FILTER_TYPES.forEach(function (type) {
+        var el = document.getElementById("card-" + type);
+        if (el) el.addEventListener("click", function () { setFilter(type); });
+      });
+
+      function renderTasks() {
+        var tbody = document.getElementById("tasks-body");
+        if (!tbody) return;
+
+        var visible = allTasks.filter(function (t) {
+          if (currentFilter) return taskMatches(t, currentFilter);
+          return true;
+        });
+
+        tbody.innerHTML = "";
+
+        if (visible.length === 0) {
+          tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="6">' +
+            (currentFilter ? "Нет задач по выбранному фильтру" : "Нет задач") +
+            '</td></tr>';
+          return;
+        }
+
+        visible.forEach(function (t) {
+          var row = createTaskRow(t);
+          if (t._new) {
+            row.classList.add("task-row-new");
+            t._new = false;
+            tbody.appendChild(row);
+            row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            setTimeout(function () { row.classList.remove("task-row-new"); }, 1500);
+          } else {
+            tbody.appendChild(row);
+          }
+        });
+      }
+
       function renderTags(container, tags) {
         container.innerHTML = "";
         tags.forEach(function (tag) {
@@ -319,7 +424,7 @@
         tr.className = "border-b border-slate-200";
 
         var statusCell = document.createElement("td");
-        statusCell.className = "px-4 py-4 align-top";
+        statusCell.className = "flex justify-center px-4 py-4";
         var checkBtn = document.createElement("button");
         checkBtn.type = "button";
         checkBtn.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors " +
@@ -341,16 +446,16 @@
         assigneeCell.innerHTML = '<div class="font-medium">' + escapeHtml(t.assignee) + '</div>';
 
         var tagsCell = document.createElement("td");
-        tagsCell.className = "px-4 py-4 align-top";
+        tagsCell.className = "px-4 py-4 text-center align-top";
         var tagsWrap = document.createElement("div");
         var tagsView = document.createElement("div");
-        tagsView.className = "tags-view flex flex-wrap gap-1 min-h-[1.25rem]";
+        tagsView.className = "tags-view flex flex-wrap justify-center gap-1 min-h-[1.25rem]";
         renderTags(tagsView, getTaskTags(t));
         var details = document.createElement("details");
         details.className = "group relative mt-2";
         var summary = document.createElement("summary");
         summary.className = "list-none cursor-pointer select-none text-xs text-slate-500 hover:text-slate-900";
-        summary.textContent = "Изменить ▾";
+        summary.textContent = "Изменить▾";
         var menu = document.createElement("div");
         menu.className = "absolute z-10 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-2 shadow-lg";
         TAGS.forEach(function (tag) {
@@ -379,7 +484,7 @@
         renderComment(commentCell, t);
 
         var actionCell = document.createElement("td");
-        actionCell.className = "px-2 py-4 align-top";
+        actionCell.className = "px-2 py-4 text-center align-top";
         var deleteBtn = document.createElement("button");
         deleteBtn.type = "button";
         deleteBtn.className = "rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 whitespace-nowrap";
@@ -440,6 +545,8 @@
           renderStatus(checkBtn, taskTitleEl, wasDone);
           alert("Ошибка при обновлении статуса");
         }
+        updateSummary();
+        renderTasks();
       }
 
       async function updateTags(t, tr) {
@@ -477,6 +584,8 @@
           renderTags(tagsView, getTaskTags(t));
           alert("Ошибка при обновлении тегов");
         }
+        updateSummary();
+        renderTasks();
       }
 
       function renderComment(cell, t) {
@@ -577,6 +686,10 @@
 
           if (res.ok) {
             if (row && row.parentNode) row.parentNode.removeChild(row);
+            var idx = allTasks.indexOf(t);
+            if (idx !== -1) allTasks.splice(idx, 1);
+            updateSummary();
+            renderTasks();
           } else {
             alert("Не удалось удалить задачу");
           }
@@ -591,16 +704,11 @@
       }
 
       window.appendTask = function (t) {
-        var tbody = document.getElementById("tasks-body");
-        if (!tbody || !t) return;
-        clearPlaceholder(tbody);
-        var row = createTaskRow(t);
-        row.classList.add("task-row-new");
-        tbody.appendChild(row);
-        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        setTimeout(function () {
-          row.classList.remove("task-row-new");
-        }, 1500);
+        if (!t) return;
+        if (allTasks.indexOf(t) === -1) allTasks.push(t);
+        t._new = true;
+        updateSummary();
+        renderTasks();
       };
 
       window.loadTasks = async function () {
@@ -613,22 +721,29 @@
           var tasks = await res.json();
           if (!Array.isArray(tasks)) return;
 
-          tbody.innerHTML = "";
-
-          if (tasks.length === 0) {
-            tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="6">Нет задач</td></tr>';
-            return;
-          }
-
-          tasks.forEach(function (t) {
-            tbody.appendChild(createTaskRow(t));
-          });
+          allTasks = tasks.slice();
+          updateSummary();
+          renderTasks();
         } catch (e) {
           // оставляем заглушку при ошибке
         }
       };
 
-      window.addEventListener("load", window.loadTasks);
+      (function init() {
+        function start() { window.loadTasks(); }
+
+        try {
+          fetch("/Config")
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (cfg) {
+              if (cfg && typeof cfg.defaultAssignee === "string") defaultAssignee = cfg.defaultAssignee;
+              start();
+            })
+            .catch(start);
+        } catch (e) {
+          start();
+        }
+      })();
 
       document.addEventListener("click", function (e) {
         document.querySelectorAll("details[open]").forEach(function (d) {
@@ -644,6 +759,13 @@
       var form = document.getElementById("chat-form");
       var input = document.getElementById("chat-input");
       var sendBtn = document.getElementById("chat-send");
+
+      input.addEventListener("keydown", function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          e.preventDefault();
+          form.requestSubmit();
+        }
+      });
 
       function escapeHtml(value) {
         var div = document.createElement("div");
