@@ -53,7 +53,8 @@ app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler, I
 {
     await handler.AddTaskAsync(request);
     var assignee = storage.ResolveAssignee(request.Assignee);
-    var created = new OneTimeTask("[ ]", request.Task, assignee, request.Comment ?? "", request.Tags ?? new List<string>());
+    var dueDate = MarkdownOneTimeTaskStorage.NormalizeDueDate(request.DueDate);
+    var created = new OneTimeTask("[ ]", request.Task, assignee, request.Comment ?? "", request.Tags ?? new List<string>(), dueDate);
     return Results.Ok(created);
 });
 

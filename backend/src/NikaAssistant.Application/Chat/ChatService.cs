@@ -31,6 +31,7 @@ public sealed class ChatService
             "task": { "type": "string", "description": "Текст задачи" },
             "assignee": { "type": "string", "description": "Ответственный за задачу" },
             "comment": { "type": "string", "description": "Комментарий к задаче" },
+            "dueDate": { "type": "string", "description": "Срок исполнения в формате yyyy-MM-dd HH:mm" },
             "tags": { "type": "array", "items": { "type": "string", "enum": ["Срочно", "Зависло", "Ожидание"] }, "description": "Теги задачи" }
           },
           "required": ["task"]
@@ -76,7 +77,7 @@ public sealed class ChatService
                 {
                     await _storage.AddAsync(request, cancellationToken);
                     var effectiveAssignee = _storage.ResolveAssignee(request.Assignee);
-                    addedTasks.Add(new OneTimeTask("[ ]", request.Task, effectiveAssignee, request.Comment ?? "", request.Tags ?? new List<string>()));
+                    addedTasks.Add(new OneTimeTask("[ ]", request.Task, effectiveAssignee, request.Comment ?? "", request.Tags ?? new List<string>(), MarkdownOneTimeTaskStorage.NormalizeDueDate(request.DueDate)));
                     messages.Add(new LlmMessage("tool", $"Задача успешно добавлена: {request.Task}", call.Id));
                 }
                 else

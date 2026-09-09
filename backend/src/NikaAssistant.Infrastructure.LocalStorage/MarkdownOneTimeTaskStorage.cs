@@ -9,6 +9,10 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     private const string DefaultArchivePath = @"C:\Users\galki\Storage\Tasks\Archive\archive-tasks.md";
     private static readonly object Sync = new();
 
+    // Актуальный порядок столбцов: Статус | Задача | Срок | Ответственный | Теги | Комментарий
+    private const string HeaderRow = "| Статус | Задача | Срок | Ответственный | Теги | Комментарий |";
+    private const string SeparatorRow = "| --- | --- | --- | --- | --- | --- |";
+
     private readonly string _filePath;
     private readonly string _archivePath;
     private readonly string? _defaultAssignee;
@@ -27,7 +31,8 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     {
         var assignee = ResolveAssignee(request.Assignee);
         var tags = request.Tags == null ? "" : string.Join(", ", request.Tags.Select(Escape));
-        var row = BuildRow("[ ]", request.Task, assignee, tags, request.Comment);
+        var dueDate = NormalizeDueDate(request.DueDate);
+        var row = BuildRow("[ ]", request.Task, dueDate, assignee, tags, request.Comment);
 
         lock (Sync)
         {
@@ -43,8 +48,8 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             {
                 var header =
                     "# Разовые задачи" + Environment.NewLine + Environment.NewLine +
-                    "| Статус | Задача | Ответственный | Теги | Комментарий |" + Environment.NewLine +
-                    "| --- | --- | --- | --- | --- |" + Environment.NewLine;
+                    HeaderRow + Environment.NewLine +
+                    SeparatorRow + Environment.NewLine;
 
                 File.WriteAllText(_filePath, header);
             }
@@ -71,11 +76,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var index = lines.FindIndex(l =>
             {
                 var parsed = ParseRow(l);
-                return parsed is not null &&
-                    parsed.Value.Status == request.Status.Trim() &&
-                    parsed.Value.Task == Escape(request.Task).Trim() &&
-                    parsed.Value.Assignee == Escape(request.Assignee).Trim() &&
-                    parsed.Value.Comment == Escape(request.Comment).Trim();
+                return parsed is not null && MatchesDelete(parsed.Value, request);
             });
 
             if (index >= 0)
@@ -105,11 +106,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var index = lines.FindIndex(l =>
             {
                 var parsed = ParseRow(l);
-                return parsed is not null &&
-                    parsed.Value.Status == request.Status.Trim() &&
-                    parsed.Value.Task == Escape(request.Task).Trim() &&
-                    parsed.Value.Assignee == Escape(request.Assignee).Trim() &&
-                    parsed.Value.Comment == Escape(request.Comment).Trim();
+                return parsed is not null && MatchesUpdate(parsed.Value, request);
             });
 
             if (index < 0)
@@ -125,8 +122,11 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var newTask = request.NewTask ?? parsed.Task;
             var newAssignee = request.NewAssignee ?? parsed.Assignee;
             var newComment = request.NewComment ?? parsed.Comment;
+            var newDueDate = string.IsNullOrWhiteSpace(request.NewDueDate)
+                ? parsed.DueDate
+                : NormalizeDueDate(request.NewDueDate);
 
-            lines[index] = BuildRow(request.NewStatus, newTask, newAssignee, newTags, newComment);
+            lines[index] = BuildRow(request.NewStatus, newTask, newDueDate, newAssignee, newTags, newComment);
             File.WriteAllLines(_filePath, lines);
         }
 
@@ -149,13 +149,16 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
         var pastHeader = false;
         var hasTagsColumn = false;
+        var hasDueDateColumn = false;
 
         foreach (var line in File.ReadAllLines(_filePath))
         {
             if (line.Contains("---", StringComparison.Ordinal))
             {
                 pastHeader = true;
-                hasTagsColumn = line.Split('|', StringSplitOptions.RemoveEmptyEntries).Length >= 5;
+                var cols = line.Split('|', StringSplitOptions.RemoveEmptyEntries).Length;
+                hasTagsColumn = cols >= 5;
+                hasDueDateColumn = cols >= 6;
                 continue;
             }
 
@@ -175,9 +178,21 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var assignee = parsed.Value.Assignee;
 
             string comment;
+            string dueDate;
             List<string> tags;
-            if (hasTagsColumn)
+            if (hasDueDateColumn)
             {
+                dueDate = string.IsNullOrWhiteSpace(parsed.Value.DueDate)
+                    ? TodayString()
+                    : parsed.Value.DueDate;
+                comment = parsed.Value.Comment;
+                tags = string.IsNullOrWhiteSpace(parsed.Value.Tags)
+                    ? new List<string>()
+                    : parsed.Value.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            }
+            else if (hasTagsColumn)
+            {
+                dueDate = TodayString();
                 comment = parsed.Value.Comment;
                 tags = string.IsNullOrWhiteSpace(parsed.Value.Tags)
                     ? new List<string>()
@@ -185,6 +200,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             }
             else
             {
+                dueDate = TodayString();
                 comment = parsed.Value.Tags;
                 tags = new List<string>();
             }
@@ -194,13 +210,13 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 continue;
             }
 
-            tasks.Add(new OneTimeTask(status, task, assignee, comment, tags));
+            tasks.Add(new OneTimeTask(status, task, assignee, comment, tags, dueDate));
         }
 
         return Task.FromResult<IReadOnlyList<OneTimeTask>>(tasks);
     }
 
-    private static (string Status, string Task, string Assignee, string Tags, string Comment)? ParseRow(string line)
+    private static (string Status, string Task, string Assignee, string Tags, string DueDate, string Comment)? ParseRow(string line)
     {
         if (!line.StartsWith("|", StringComparison.Ordinal))
         {
@@ -208,27 +224,127 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         }
 
         var cells = line.Split('|');
-        if (cells.Length < 6)
+        // Актуальные 6 колонок: | Статус | Задача | Срок | Ответственный | Теги | Комментарий |
+        // Плюс поддержка предыдущего порядка: | Статус | Задача | Ответственный | Теги | Срок | Комментарий |
+        if (cells.Length >= 8)
         {
-            return null;
+            var third = cells[3].Trim();
+            var fifth = cells[5].Trim();
+            if (!LooksLikeDueDate(third) && LooksLikeDueDate(fifth))
+            {
+                return (
+                    Status: cells[1].Trim(),
+                    Task: cells[2].Trim(),
+                    Assignee: cells[3].Trim(),
+                    Tags: cells[4].Trim(),
+                    DueDate: cells[5].Trim(),
+                    Comment: string.Join("|", cells.Skip(6).Take(cells.Length - 7)).Trim());
+            }
+
+            return (
+                Status: cells[1].Trim(),
+                Task: cells[2].Trim(),
+                Assignee: cells[4].Trim(),
+                Tags: cells[5].Trim(),
+                DueDate: cells[3].Trim(),
+                Comment: string.Join("|", cells.Skip(6).Take(cells.Length - 7)).Trim());
         }
 
-        return (
-            Status: cells[1].Trim(),
-            Task: cells[2].Trim(),
-            Assignee: cells[3].Trim(),
-            Tags: cells[4].Trim(),
-            Comment: cells[5].Trim());
+        // Legacy 5 columns: | Статус | Задача | Ответственный | Теги | Комментарий |
+        if (cells.Length >= 7)
+        {
+            return (
+                Status: cells[1].Trim(),
+                Task: cells[2].Trim(),
+                Assignee: cells[3].Trim(),
+                Tags: cells[4].Trim(),
+                DueDate: string.Empty,
+                Comment: string.Join("|", cells.Skip(5).Take(cells.Length - 6)).Trim());
+        }
+
+        // Legacy 4 columns (no tags)
+        if (cells.Length >= 6)
+        {
+            return (
+                Status: cells[1].Trim(),
+                Task: cells[2].Trim(),
+                Assignee: cells[3].Trim(),
+                Tags: string.Empty,
+                DueDate: string.Empty,
+                Comment: string.Join("|", cells.Skip(4).Take(cells.Length - 5)).Trim());
+        }
+
+        return null;
+    }
+
+    private static bool LooksLikeDueDate(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var trimmed = value.Trim().Replace('T', ' ');
+        return System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d{4}-\d{2}-\d{2}([ ]\d{2}:\d{2}(:\d{2})?)?$")
+            || (trimmed.Contains('-') && DateTime.TryParse(trimmed, out _));
+    }
+
+    private static bool MatchesDelete(
+        (string Status, string Task, string Assignee, string Tags, string DueDate, string Comment) parsed,
+        DeleteTaskRequest request)
+    {
+        if (parsed.Status != request.Status.Trim() ||
+            parsed.Task != Escape(request.Task).Trim() ||
+            parsed.Assignee != Escape(request.Assignee).Trim() ||
+            parsed.Comment != Escape(request.Comment).Trim())
+        {
+            return false;
+        }
+
+        // DueDate проверяем только если он передан (обратная совместимость).
+        if (!string.IsNullOrWhiteSpace(request.DueDate) &&
+            NormalizeDueDate(parsed.DueDate) != NormalizeDueDate(request.DueDate))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool MatchesUpdate(
+        (string Status, string Task, string Assignee, string Tags, string DueDate, string Comment) parsed,
+        UpdateTaskRequest request)
+    {
+        if (parsed.Status != request.Status.Trim() ||
+            parsed.Task != Escape(request.Task).Trim() ||
+            parsed.Assignee != Escape(request.Assignee).Trim() ||
+            parsed.Comment != Escape(request.Comment).Trim())
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.DueDate) &&
+            NormalizeDueDate(parsed.DueDate) != NormalizeDueDate(request.DueDate))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private void MigrateSchema()
     {
-        if (!File.Exists(_filePath))
+        MigrateFile(_filePath);
+    }
+
+    private static void MigrateFile(string filePath)
+    {
+        if (!File.Exists(filePath))
         {
             return;
         }
 
-        var lines = File.ReadAllLines(_filePath);
+        var lines = File.ReadAllLines(filePath);
         var migrated = false;
 
         for (var i = 0; i < lines.Length; i++)
@@ -241,9 +357,9 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
             if (line.Contains("Статус", StringComparison.Ordinal))
             {
-                if (CountDataColumns(line) < 5)
+                if (line.Trim() != HeaderRow)
                 {
-                    lines[i] = "| Статус | Задача | Ответственный | Теги | Комментарий |";
+                    lines[i] = HeaderRow;
                     migrated = true;
                 }
                 continue;
@@ -251,26 +367,78 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
             if (line.Contains("---", StringComparison.Ordinal))
             {
-                if (CountDataColumns(line) < 5)
+                if (line.Trim() != SeparatorRow)
                 {
-                    lines[i] = "| --- | --- | --- | --- | --- |";
+                    lines[i] = SeparatorRow;
                     migrated = true;
                 }
                 continue;
             }
 
-            if (CountDataColumns(line) == 4)
+            var cols = CountDataColumns(line);
+            if (cols == 4)
             {
+                // Старая схема без тегов: | Статус | Задача | Ответственный | Комментарий |
+                // -> | Статус | Задача | Срок(сегодня) | Ответственный | Теги(пусто) | Комментарий |
                 var cells = line.Split('|').ToList();
-                cells.Insert(4, " ");
+                cells.Insert(3, $" {TodayString()} ");
+                cells.Insert(5, " ");
                 lines[i] = string.Join("|", cells);
                 migrated = true;
+            }
+            else if (cols == 5)
+            {
+                // Старая схема без срока: | Статус | Задача | Ответственный | Теги | Комментарий |
+                // -> вставляем сегодняшний Срок после Задачи.
+                var cells = line.Split('|').ToList();
+                cells.Insert(3, $" {TodayString()} ");
+                lines[i] = string.Join("|", cells);
+                migrated = true;
+            }
+            else if (cols >= 6)
+            {
+                var cells = line.Split('|').ToList();
+                var third = cells[3].Trim();
+                var fifth = cells[5].Trim();
+
+                if (!LooksLikeDueDate(third) && (LooksLikeDueDate(fifth) || string.IsNullOrWhiteSpace(third)))
+                {
+                    // Предыдущий порядок: | Статус | Задача | Ответственный | Теги | Срок | Комментарий |
+                    // -> переставляем Срок на 3-ю позицию.
+                    var dueRaw = cells[5];
+                    cells.RemoveAt(5);
+                    var normalized = NormalizeDueDate(dueRaw.Trim());
+                    cells.Insert(3, $" {normalized} ");
+                    lines[i] = string.Join("|", cells);
+                    migrated = true;
+                }
+                else
+                {
+                    // Уже новый порядок: | Статус | Задача | Срок | Ответственный | Теги | Комментарий |
+                    // Заполняем пустой Срок сегодняшней датой, нормализуем формат.
+                    if (string.IsNullOrWhiteSpace(third))
+                    {
+                        cells[3] = $" {TodayString()} ";
+                        lines[i] = string.Join("|", cells);
+                        migrated = true;
+                    }
+                    else
+                    {
+                        var normalized = NormalizeDueDate(third);
+                        if (normalized != third)
+                        {
+                            cells[3] = $" {normalized} ";
+                            lines[i] = string.Join("|", cells);
+                            migrated = true;
+                        }
+                    }
+                }
             }
         }
 
         if (migrated)
         {
-            File.WriteAllLines(_filePath, lines);
+            File.WriteAllLines(filePath, lines);
         }
     }
 
@@ -292,10 +460,16 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         {
             var header =
                 "# Архив задач" + Environment.NewLine + Environment.NewLine +
-                "| Статус | Задача | Ответственный | Теги | Комментарий |" + Environment.NewLine +
-                "| --- | --- | --- | --- | --- |" + Environment.NewLine;
+                HeaderRow + Environment.NewLine +
+                SeparatorRow + Environment.NewLine;
 
             File.WriteAllText(_archivePath, header);
+        }
+        else
+        {
+            // Архив уже в новом порядке (строка приходит из мигрированного файла),
+            // но старый архивный файл мог остаться в предыдущем порядке — нормализуем.
+            MigrateFile(_archivePath);
         }
 
         EnsureTrailingNewline(_archivePath);
@@ -316,8 +490,8 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         }
     }
 
-    private static string BuildRow(string status, string task, string assignee, string tags, string? comment) =>
-        $"| {status} | {Escape(task)} | {Escape(assignee)} | {tags} | {Escape(comment)} |";
+    private static string BuildRow(string status, string task, string? dueDate, string assignee, string tags, string? comment) =>
+        $"| {status} | {Escape(task)} | {Escape(NormalizeDueDate(dueDate))} | {Escape(assignee)} | {tags} | {Escape(comment)} |";
 
     private static string Escape(string? value) =>
         (value ?? string.Empty)
@@ -325,4 +499,23 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             .Replace("\n", " ")
             .Replace("|", "\\|")
             .Trim();
+
+    private static string TodayString() =>
+        DateTime.Today.ToString("yyyy-MM-dd HH:mm");
+
+    public static string NormalizeDueDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return TodayString();
+        }
+
+        var trimmed = value.Trim().Replace('T', ' ');
+        if (DateTime.TryParse(trimmed, out var dt))
+        {
+            return dt.ToString("yyyy-MM-dd HH:mm");
+        }
+
+        return trimmed;
+    }
 }

@@ -71,17 +71,18 @@
         <table class="w-full table-fixed text-left">
           <thead class="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th class="w-[10%] px-4 py-3 text-center font-semibold">Статус</th>
-              <th class="w-[34%] px-4 py-3 font-semibold">Задача</th>
-              <th class="w-[16%] px-4 py-3 font-semibold">Ответственный</th>
-              <th class="w-[14%] px-4 py-3 text-center font-semibold">Теги</th>
-              <th class="w-[18%] px-4 py-3 font-semibold">Комментарий</th>
-              <th class="w-[12%] px-4 py-3 text-center font-semibold">Действия</th>
+              <th class="w-[8%] px-4 py-3 text-center font-semibold">Статус</th>
+              <th class="w-[28%] px-4 py-3 font-semibold">Задача</th>
+              <th class="w-[13%] px-4 py-3 text-center font-semibold">Срок</th>
+              <th class="w-[13%] px-4 py-3 font-semibold">Ответственный</th>
+              <th class="w-[11%] px-4 py-3 text-center font-semibold">Теги</th>
+              <th class="w-[17%] px-4 py-3 font-semibold">Комментарий</th>
+              <th class="w-[10%] px-4 py-3 text-center font-semibold"></th>
             </tr>
           </thead>
           <tbody id="tasks-body">
               <tr class="tasks-placeholder border-b border-slate-200">
-                <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="6">Загрузка задач…</td>
+                <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="7">Загрузка задач…</td>
               </tr>
           </tbody>
         </table>
@@ -132,6 +133,10 @@
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Зависло" /> Зависло</label>
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ожидание" /> Ожидание</label>
           </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Срок исполнения</label>
+          <input name="dueDate" type="datetime-local" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Комментарий</label>
@@ -187,11 +192,13 @@
           if (cb.checked) selectedTags.push(cb.value);
         });
 
+        var rawDue = form.dueDate ? form.dueDate.value : "";
         var payload = {
           task: form.task.value.trim(),
           assignee: form.assignee.value.trim(),
           comment: form.comment.value.trim(),
-          tags: selectedTags
+          tags: selectedTags,
+          dueDate: rawDue ? rawDue.replace("T", " ") : ""
         };
 
         try {
@@ -216,6 +223,7 @@
                 assignee: payload.assignee,
                 comment: payload.comment,
                 tags: payload.tags || [],
+                dueDate: payload.dueDate || "",
                 status: "[ ]"
               });
             } else if (window.loadTasks) {
@@ -247,6 +255,60 @@
         if (Array.isArray(t.tags)) return t.tags;
         if (typeof t.tags === "string" && t.tags) return t.tags.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
         return [];
+      }
+
+      function getDueDate(t) {
+        return t.dueDate != null ? t.dueDate : (t.DueDate != null ? t.DueDate : "");
+      }
+
+      function parseDue(value) {
+        if (!value) return null;
+        var normalized = String(value).replace("T", " ").trim();
+        var m = normalized.match(/(\d{4})-(\d{2})-(\d{2})(?:[ ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+        if (!m) return null;
+        var y = +m[1], mo = +m[2] - 1, d = +m[3];
+        var h = m[4] != null ? +m[4] : 0, mi = m[5] != null ? +m[5] : 0;
+        var dt = new Date(y, mo, d, h, mi, 0, 0);
+        if (isNaN(dt.getTime())) return null;
+        return { date: dt, dayKey: m[1] + "-" + m[2] + "-" + m[3], time: (m[4] != null ? m[4] + ":" + m[5] : "") };
+      }
+
+      function startOfDay(dt) {
+        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0);
+      }
+
+      function dueBucket(t, todayMidnight, tomorrowMidnight) {
+        var p = parseDue(getDueDate(t));
+        if (!p) return "today";
+        var day = startOfDay(p.date).getTime();
+        if (day <= todayMidnight.getTime()) return "today";
+        if (day === tomorrowMidnight.getTime()) return "tomorrow";
+        return "later";
+      }
+
+      // В столбце "Срок": Today/Tomorrow — только время, Later — только дата.
+      function formatDueCell(t, bucket) {
+        var raw = getDueDate(t);
+        var p = parseDue(raw);
+        if (!p) return "—";
+        if (bucket === "later") {
+          var dd = String(p.date.getDate()).padStart(2, "0");
+          var mm = String(p.date.getMonth() + 1).padStart(2, "0");
+          return dd + "." + mm + "." + p.date.getFullYear();
+        }
+        return p.time || "—";
+      }
+
+      var groupCollapsed = { today: false, tomorrow: false, later: false };
+
+      function taskIdentity(t) {
+        return {
+          status: t.status || "",
+          task: t.task || "",
+          assignee: t.assignee || "",
+          comment: t.comment || "",
+          dueDate: getDueDate(t) || ""
+        };
       }
 
       var allTasks = [];
@@ -358,6 +420,54 @@
         if (el) el.addEventListener("click", function () { setFilter(type); });
       });
 
+      var DUE_GROUPS = [
+        { key: "today", title: "Сегодня" },
+        { key: "tomorrow", title: "Завтра" },
+        { key: "later", title: "Позднее" }
+      ];
+
+      function appendTaskRow(tbody, t, bucket) {
+        var row = createTaskRow(t, bucket);
+        if (t._new) {
+          row.classList.add("task-row-new");
+          t._new = false;
+          row.setAttribute("data-new-task", "1");
+          tbody.appendChild(row);
+          row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          setTimeout(function () { row.classList.remove("task-row-new"); }, 1500);
+        } else {
+          tbody.appendChild(row);
+        }
+      }
+
+      function createGroupHeader(group, count) {
+        var tr = document.createElement("tr");
+        tr.className = "due-group-header bg-white";
+        tr.setAttribute("data-group", group.key);
+        var td = document.createElement("td");
+        td.setAttribute("colspan", "7");
+        td.className = "px-4 py-2 align-middle select-none";
+
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "flex items-center gap-2 text-left";
+        var collapsed = !!groupCollapsed[group.key];
+
+        btn.innerHTML =
+          '<span class="due-chevron inline-block text-xs text-slate-400 transition-transform" style="transform:rotate(' + (collapsed ? "-90deg" : "0deg") + ')">▼</span>' +
+          '<span class="text-base font-bold text-slate-900">' + group.title + '</span>' +
+          '<span class="text-base font-normal text-slate-400">' + count + '</span>';
+
+        btn.addEventListener("click", function () {
+          groupCollapsed[group.key] = !groupCollapsed[group.key];
+          renderTasks();
+        });
+
+        td.appendChild(btn);
+        tr.appendChild(td);
+        return tr;
+      }
+
       function renderTasks() {
         var tbody = document.getElementById("tasks-body");
         if (!tbody) return;
@@ -370,23 +480,51 @@
         tbody.innerHTML = "";
 
         if (visible.length === 0) {
-          tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="6">' +
+          tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="7">' +
             (currentFilter ? "Нет задач по выбранному фильтру" : "Нет задач") +
             '</td></tr>';
           return;
         }
 
+        var now = new Date();
+        var todayMidnight = startOfDay(now);
+        var tomorrowMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000);
+
+        var buckets = { today: [], tomorrow: [], later: [] };
         visible.forEach(function (t) {
-          var row = createTaskRow(t);
-          if (t._new) {
-            row.classList.add("task-row-new");
-            t._new = false;
-            tbody.appendChild(row);
-            row.scrollIntoView({ block: "nearest", behavior: "smooth" });
-            setTimeout(function () { row.classList.remove("task-row-new"); }, 1500);
-          } else {
-            tbody.appendChild(row);
+          var b = dueBucket(t, todayMidnight, tomorrowMidnight);
+          buckets[b].push(t);
+          if (t._new) groupCollapsed[b] = false;
+        });
+
+        function sortByTime(a, b) {
+          var pa = parseDue(getDueDate(a)), pb = parseDue(getDueDate(b));
+          var ta = pa ? pa.date.getTime() : 0, tb = pb ? pb.date.getTime() : 0;
+          return ta - tb;
+        }
+        buckets.today.sort(sortByTime);
+        buckets.tomorrow.sort(sortByTime);
+        buckets.later.sort(sortByTime);
+
+        DUE_GROUPS.forEach(function (group) {
+          var list = buckets[group.key];
+          tbody.appendChild(createGroupHeader(group, list.length));
+          if (groupCollapsed[group.key]) return;
+          if (list.length === 0) {
+            var emptyTr = document.createElement("tr");
+            emptyTr.className = "border-b border-slate-200";
+            emptyTr.setAttribute("data-group-row", group.key);
+            var emptyTd = document.createElement("td");
+            emptyTd.setAttribute("colspan", "7");
+            emptyTd.className = "px-4 py-3 text-sm text-slate-400";
+            emptyTd.textContent = "Нет задач";
+            emptyTr.appendChild(emptyTd);
+            tbody.appendChild(emptyTr);
+            return;
           }
+          list.forEach(function (t) {
+            appendTaskRow(tbody, t, group.key);
+          });
         });
       }
 
@@ -402,10 +540,11 @@
         });
       }
 
-      function createTaskRow(t) {
+      function createTaskRow(t, bucket) {
         var done = (t.status || "").indexOf("x") !== -1;
         var tr = document.createElement("tr");
         tr.className = "border-b border-slate-200";
+        if (bucket) tr.setAttribute("data-group-row", bucket);
 
         var statusCell = document.createElement("td");
         statusCell.className = "flex justify-center px-4 py-4";
@@ -488,8 +627,20 @@
         }
         tagsCell.appendChild(tagsWrap);
 
+        var effectiveBucket = bucket;
+        if (!effectiveBucket) {
+          var _now = new Date();
+          var _today = startOfDay(_now);
+          var _tomorrow = new Date(_today.getTime() + 24 * 60 * 60 * 1000);
+          effectiveBucket = dueBucket(t, _today, _tomorrow);
+        }
+        var dueCell = document.createElement("td");
+        dueCell.className = "px-4 py-4 text-center align-top text-[13px] text-slate-700 whitespace-nowrap";
+        dueCell.textContent = formatDueCell(t, effectiveBucket);
+        dueCell.title = getDueDate(t) || "";
+
         var commentCell = document.createElement("td");
-        commentCell.className = "px-4 py-4 align-top text-sm text-slate-700";
+        commentCell.className = "px-4 py-4 align-top text-[13px] text-slate-700";
         renderComment(commentCell, t);
 
         var actionCell = document.createElement("td");
@@ -505,6 +656,7 @@
 
         tr.appendChild(statusCell);
         tr.appendChild(taskCell);
+        tr.appendChild(dueCell);
         tr.appendChild(assigneeCell);
         tr.appendChild(tagsCell);
         tr.appendChild(commentCell);
@@ -516,7 +668,7 @@
         cell.innerHTML = "";
         var done = (t.status || "").indexOf("x") !== -1;
         var view = document.createElement("div");
-        view.className = "task-title cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-base font-normal leading-snug text-slate-900" +
+        view.className = "task-title cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm font-normal leading-snug text-slate-900" +
           (done ? " line-through text-slate-400" : "");
         view.textContent = t.task || "";
         view.title = "Нажмите, чтобы изменить задачу";
@@ -530,7 +682,7 @@
         if (cell.querySelector("textarea")) return;
 
         var textarea = document.createElement("textarea");
-        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-base font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
         textarea.value = t.task || "";
         cell.replaceChild(textarea, view);
         autoGrow(textarea);
@@ -581,6 +733,7 @@
               task: previous,
               assignee: t.assignee,
               comment: t.comment,
+              dueDate: getDueDate(t),
               newStatus: t.status,
               newTags: getTaskTags(t),
               newTask: newValue
@@ -602,7 +755,7 @@
       function renderAssignee(cell, t) {
         cell.innerHTML = "";
         var view = document.createElement("div");
-        view.className = "assignee-name cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-base font-normal leading-snug text-slate-900";
+        view.className = "assignee-name cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm font-normal leading-snug text-slate-900";
         view.textContent = t.assignee || "";
         view.title = "Нажмите, чтобы изменить ответственного";
         view.addEventListener("click", function () {
@@ -615,7 +768,7 @@
         if (cell.querySelector("textarea")) return;
 
         var textarea = document.createElement("textarea");
-        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-base font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
         textarea.value = t.assignee || "";
         cell.replaceChild(textarea, view);
         autoGrow(textarea);
@@ -651,6 +804,7 @@
         var previous = t.assignee;
         t.assignee = newValue;
         renderAssignee(cell, t);
+        updateSummary();
 
         try {
           var res = await fetch("/UpdateTask", {
@@ -661,6 +815,7 @@
               task: t.task,
               assignee: previous,
               comment: t.comment,
+              dueDate: getDueDate(t),
               newStatus: t.status,
               newTags: getTaskTags(t),
               newAssignee: newValue
@@ -670,11 +825,13 @@
           if (!res.ok) {
             t.assignee = previous;
             renderAssignee(cell, t);
+            updateSummary();
             alert("Не удалось обновить ответственного");
           }
         } catch (err) {
           t.assignee = previous;
           renderAssignee(cell, t);
+          updateSummary();
           alert("Ошибка при обновлении ответственного");
         }
       }
@@ -706,6 +863,7 @@
               task: t.task,
               assignee: t.assignee,
               comment: t.comment,
+              dueDate: getDueDate(t),
               newStatus: newStatus,
               newTags: getTaskTags(t)
             })
@@ -744,6 +902,7 @@
               task: t.task,
               assignee: t.assignee,
               comment: t.comment,
+              dueDate: getDueDate(t),
               newStatus: t.status,
               newTags: selected
             })
@@ -766,7 +925,7 @@
       function renderComment(cell, t) {
         cell.innerHTML = "";
         var view = document.createElement("div");
-        view.className = "comment-view cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm leading-snug text-slate-700";
+        view.className = "comment-view cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-[13px] leading-snug text-slate-700";
         view.textContent = t.comment || "";
         view.title = "Нажмите, чтобы изменить комментарий";
         view.addEventListener("click", function () {
@@ -779,7 +938,7 @@
         if (cell.querySelector("textarea")) return;
 
         var textarea = document.createElement("textarea");
-        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm leading-snug font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-[13px] leading-snug font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
         textarea.value = t.comment || "";
         cell.replaceChild(textarea, view);
         autoGrow(textarea);
@@ -825,6 +984,7 @@
               task: t.task,
               assignee: t.assignee,
               comment: previous,
+              dueDate: getDueDate(t),
               newStatus: t.status,
               newTags: getTaskTags(t),
               newComment: newComment
@@ -850,7 +1010,8 @@
           status: t.status || "",
           task: t.task || "",
           assignee: t.assignee || "",
-          comment: t.comment || ""
+          comment: t.comment || "",
+          dueDate: getDueDate(t) || ""
         };
 
         try {
