@@ -116,7 +116,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
             var parsed = ParseRow(lines[index])!.Value;
             var newTags = request.NewTags == null
-                ? parsed.Tags
+                ? CleanTags(parsed.Tags)
                 : string.Join(", ", request.NewTags.Select(Escape));
 
             var newTask = request.NewTask ?? parsed.Task;
@@ -188,7 +188,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 comment = parsed.Value.Comment;
                 tags = string.IsNullOrWhiteSpace(parsed.Value.Tags)
                     ? new List<string>()
-                    : parsed.Value.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                    : parsed.Value.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(x => !LooksLikeDueDate(x)).ToList();
             }
             else if (hasTagsColumn)
             {
@@ -196,7 +196,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 comment = parsed.Value.Comment;
                 tags = string.IsNullOrWhiteSpace(parsed.Value.Tags)
                     ? new List<string>()
-                    : parsed.Value.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                    : parsed.Value.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(x => !LooksLikeDueDate(x)).ToList();
             }
             else
             {
@@ -275,6 +275,23 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         }
 
         return null;
+    }
+
+    // Убирает из строки тегов фрагменты, похожие на дату (мусор от старой версии,
+    // которая писала срок в колонку тегов, когда тегов не было).
+    private static string CleanTags(string? tags)
+    {
+        if (string.IsNullOrWhiteSpace(tags))
+        {
+            return string.Empty;
+        }
+
+        var parts = tags
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(p => !string.IsNullOrWhiteSpace(p) && !LooksLikeDueDate(p))
+            .ToList();
+
+        return string.Join(", ", parts);
     }
 
     private static bool LooksLikeDueDate(string value)
@@ -409,6 +426,8 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                     cells.RemoveAt(5);
                     var normalized = NormalizeDueDate(dueRaw.Trim());
                     cells.Insert(3, $" {normalized} ");
+                    // Заодно вычищаем мусор из Тегов (туда могла попасть дата).
+                    cells[5] = $" {CleanTags(cells[5])} ";
                     lines[i] = string.Join("|", cells);
                     migrated = true;
                 }
@@ -431,6 +450,16 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                             lines[i] = string.Join("|", cells);
                             migrated = true;
                         }
+                    }
+
+                    // Вычищаем мусор из Тегов: туда могла попасть дата
+                    // (старая версия писала срок в колонку тегов, когда тегов не было).
+                    var cleanedTags = CleanTags(cells[5]);
+                    if (cells[5].Trim() != cleanedTags)
+                    {
+                        cells[5] = $" {cleanedTags} ";
+                        lines[i] = string.Join("|", cells);
+                        migrated = true;
                     }
                 }
             }

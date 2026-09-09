@@ -98,7 +98,7 @@
           </div>
           <form id="chat-form" class="flex items-end gap-3 border-t border-slate-200 px-5 py-4">
             <textarea id="chat-input" rows="2" required placeholder="Введите сообщение…"
-              class="flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
+              class="max-h-none flex-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
             <button type="submit" id="chat-send"
               class="rounded-lg bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">Отправить</button>
           </form>
@@ -508,6 +508,7 @@
 
         DUE_GROUPS.forEach(function (group) {
           var list = buckets[group.key];
+          if (currentFilter && list.length === 0) return;
           tbody.appendChild(createGroupHeader(group, list.length));
           if (groupCollapsed[group.key]) return;
           if (list.length === 0) {
@@ -532,10 +533,10 @@
         container.innerHTML = "";
         tags.forEach(function (tag) {
           var found = TAGS.filter(function (x) { return x.key === tag; })[0];
-          if (!found) return;
           var span = document.createElement("span");
-          span.className = "rounded-md px-2.5 py-1 text-xs font-medium ring-1 " + found.cls;
-          span.textContent = found.key;
+          span.className = "rounded-md px-2.5 py-1 text-xs font-medium ring-1 " +
+            (found ? found.cls : "bg-slate-100 text-slate-700 ring-slate-200");
+          span.textContent = found ? found.key : tag;
           container.appendChild(span);
         });
       }
@@ -571,59 +572,33 @@
         var tagsCell = document.createElement("td");
         tagsCell.className = "px-4 py-4 text-center align-top";
         var tagsWrap = document.createElement("div");
-
-        var menu = document.createElement("div");
-        menu.className = "row-tags-menu absolute z-10 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-2 shadow-lg";
-        TAGS.forEach(function (tag) {
-          var label = document.createElement("label");
-          label.className = "flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50";
-          var cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.name = "row-tag";
-          cb.value = tag.key;
-          cb.checked = getTaskTags(t).indexOf(tag.key) !== -1;
-          cb.addEventListener("change", function () {
-            updateTags(t, tr);
-          });
-          label.appendChild(cb);
-          label.appendChild(document.createTextNode(tag.key));
-          menu.appendChild(label);
-        });
+        tagsWrap.className = "flex flex-col items-center gap-1";
 
         var tagsView = document.createElement("div");
         tagsView.className = "tags-view flex flex-wrap justify-center gap-1";
         if (getTaskTags(t).length > 0) tagsView.classList.add("min-h-[1.25rem]");
         renderTags(tagsView, getTaskTags(t));
+        tagsView.querySelectorAll("span").forEach(function (span) {
+          span.className += " cursor-pointer hover:ring-slate-400";
+          span.title = "Нажмите, чтобы изменить теги";
+          span.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleTagPopup(t, span);
+          });
+        });
         tagsWrap.appendChild(tagsView);
 
-        var tagsList = getTaskTags(t);
-        if (tagsList.length === 0) {
-          var details = document.createElement("details");
-          details.className = "group relative mt-2";
-          var summary = document.createElement("summary");
-          summary.className = "list-none cursor-pointer text-xs text-slate-500 hover:text-slate-900 flex items-center justify-center";
-          summary.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-          details.appendChild(summary);
-          details.appendChild(menu);
-          tagsWrap.appendChild(details);
-        } else {
-          var menuWrap = document.createElement("div");
-          menuWrap.className = "group relative mt-2 flex justify-center";
-          menu.classList.add("tags-toggle-menu", "hidden");
-          menuWrap.appendChild(menu);
-          tagsWrap.appendChild(menuWrap);
-
-          tagsView.querySelectorAll("span").forEach(function (span) {
-            span.className += " cursor-pointer hover:ring-slate-400";
-            span.addEventListener("click", function (e) {
-              e.stopPropagation();
-              var open = !menu.classList.contains("hidden");
-              document.querySelectorAll(".tags-toggle-menu:not(.hidden)").forEach(function (m) {
-                if (m !== menu) m.classList.add("hidden");
-              });
-              menu.classList.toggle("hidden", open);
-            });
+        if (tagsView.childElementCount === 0) {
+          var tagsEditBtn = document.createElement("button");
+          tagsEditBtn.type = "button";
+          tagsEditBtn.className = "rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900";
+          tagsEditBtn.title = "Изменить теги";
+          tagsEditBtn.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+          tagsEditBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleTagPopup(t, tagsEditBtn);
           });
+          tagsWrap.appendChild(tagsEditBtn);
         }
         tagsCell.appendChild(tagsWrap);
 
@@ -636,8 +611,7 @@
         }
         var dueCell = document.createElement("td");
         dueCell.className = "px-4 py-4 text-center align-top text-[13px] text-slate-700 whitespace-nowrap";
-        dueCell.textContent = formatDueCell(t, effectiveBucket);
-        dueCell.title = getDueDate(t) || "";
+        renderDue(dueCell, t, effectiveBucket);
 
         var commentCell = document.createElement("td");
         commentCell.className = "px-4 py-4 align-top text-[13px] text-slate-700";
@@ -883,15 +857,84 @@
         renderTasks();
       }
 
-      async function updateTags(t, tr) {
+      var tagPopup = null;
+      var tagPopupTask = null;
+
+      function getTagPopup() {
+        if (tagPopup) return tagPopup;
+        tagPopup = document.createElement("div");
+        tagPopup.className = "fixed z-50 hidden w-44 rounded-lg border border-slate-200 bg-white p-2 shadow-lg";
+        tagPopup.addEventListener("click", function (e) { e.stopPropagation(); });
+        document.body.appendChild(tagPopup);
+        return tagPopup;
+      }
+
+      function toggleTagPopup(t, anchorEl) {
+        var popup = getTagPopup();
+        if (tagPopupTask === t && !popup.classList.contains("hidden")) {
+          closeTagPopup();
+          return;
+        }
+        openTagPopup(t, anchorEl);
+      }
+
+      function openTagPopup(t, anchorEl) {
+        var popup = getTagPopup();
+        tagPopupTask = t;
+        popup.innerHTML = "";
+        var current = getTaskTags(t);
+        TAGS.forEach(function (tag) {
+          var label = document.createElement("label");
+          label.className = "flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50";
+          var cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.name = "row-tag";
+          cb.value = tag.key;
+          cb.checked = current.indexOf(tag.key) !== -1;
+          cb.addEventListener("change", function () {
+            updateTags(t);
+          });
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(tag.key));
+          popup.appendChild(label);
+        });
+        popup.classList.remove("hidden");
+        var r = anchorEl.getBoundingClientRect();
+        var pw = 176;
+        var ph = 140;
+        var left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8));
+        var top = r.bottom + 4;
+        if (top + ph > window.innerHeight - 8) {
+          top = Math.max(8, r.top - ph - 4);
+        }
+        popup.style.left = left + "px";
+        popup.style.top = top + "px";
+      }
+
+      function closeTagPopup() {
+        if (tagPopup) tagPopup.classList.add("hidden");
+        tagPopupTask = null;
+      }
+
+      function syncTagPopup(t) {
+        if (!tagPopup || tagPopupTask !== t || tagPopup.classList.contains("hidden")) return;
+        var current = getTaskTags(t);
+        tagPopup.querySelectorAll('input[name="row-tag"]').forEach(function (cb) {
+          cb.checked = current.indexOf(cb.value) !== -1;
+        });
+      }
+
+      async function updateTags(t) {
+        var popup = getTagPopup();
         var selected = [];
-        tr.querySelectorAll('input[name="row-tag"]').forEach(function (cb) {
+        popup.querySelectorAll('input[name="row-tag"]').forEach(function (cb) {
           if (cb.checked) selected.push(cb.value);
         });
 
-        var tagsView = tr.querySelector(".tags-view");
-        var optimistic = selected.slice();
-        renderTags(tagsView, optimistic);
+        var previous = getTaskTags(t);
+        t.tags = selected.slice();
+        updateSummary();
+        renderTasks();
 
         try {
           var res = await fetch("/UpdateTask", {
@@ -908,18 +951,20 @@
             })
           });
 
-          if (res.ok) {
-            t.tags = selected;
-          } else {
-            renderTags(tagsView, getTaskTags(t));
+          if (!res.ok) {
+            t.tags = previous;
+            updateSummary();
+            renderTasks();
+            syncTagPopup(t);
             alert("Не удалось обновить теги");
           }
         } catch (err) {
-          renderTags(tagsView, getTaskTags(t));
+          t.tags = previous;
+          updateSummary();
+          renderTasks();
+          syncTagPopup(t);
           alert("Ошибка при обновлении тегов");
         }
-        updateSummary();
-        renderTasks();
       }
 
       function renderComment(cell, t) {
@@ -1003,6 +1048,110 @@
         }
       }
 
+      function toDatetimeLocalValue(raw) {
+        var p = parseDue(raw);
+        if (!p) return "";
+        var d = p.date;
+        function pad(n) { return String(n).padStart(2, "0"); }
+        return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+          "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+      }
+
+      function fromDatetimeLocalValue(value) {
+        if (!value) return "";
+        return String(value).replace("T", " ");
+      }
+
+      function renderDue(cell, t, bucket) {
+        cell.innerHTML = "";
+        var view = document.createElement("div");
+        view.className = "due-view cursor-text whitespace-nowrap rounded px-1 -mx-1 hover:bg-slate-100 text-[13px] leading-snug text-slate-700";
+        view.textContent = formatDueCell(t, bucket);
+        view.title = (getDueDate(t) || "") + ". Нажмите, чтобы изменить срок";
+        view.addEventListener("click", function () {
+          beginDueEdit(t, cell, bucket, view);
+        });
+        cell.appendChild(view);
+      }
+
+      function beginDueEdit(t, cell, bucket, view) {
+        if (cell.querySelector("input")) return;
+
+        var input = document.createElement("input");
+        input.type = "datetime-local";
+        input.className = "relative z-10 w-full min-w-[175px] rounded-lg border border-slate-300 bg-white px-1 py-1 text-[13px] font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        input.value = toDatetimeLocalValue(getDueDate(t));
+        cell.replaceChild(input, view);
+        input.focus();
+        if (input.showPicker) {
+          try { input.showPicker(); } catch (e) { /* игнорируем */ }
+        }
+
+        var finished = false;
+        function commit(save) {
+          if (finished) return;
+          finished = true;
+          var rawValue = input.value;
+          if (!save) {
+            renderDue(cell, t, bucket);
+            return;
+          }
+          var newBackend = fromDatetimeLocalValue(rawValue);
+          if (!newBackend || newBackend === (getDueDate(t) || "")) {
+            renderDue(cell, t, bucket);
+            return;
+          }
+          updateDueDate(t, newBackend);
+        }
+
+        input.addEventListener("blur", function () { commit(true); });
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(true);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            commit(false);
+          }
+        });
+      }
+
+      async function updateDueDate(t, newDueBackend) {
+        var previous = getDueDate(t) || "";
+        t.dueDate = newDueBackend;
+        t.DueDate = newDueBackend;
+        renderTasks();
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: t.assignee,
+              comment: t.comment,
+              dueDate: previous,
+              newStatus: t.status,
+              newTags: getTaskTags(t),
+              newDueDate: newDueBackend
+            })
+          });
+
+          if (!res.ok) {
+            t.dueDate = previous;
+            t.DueDate = previous;
+            renderTasks();
+            alert("Не удалось обновить срок");
+          }
+        } catch (err) {
+          t.dueDate = previous;
+          t.DueDate = previous;
+          renderTasks();
+          alert("Ошибка при обновлении срока");
+        }
+      }
+
       async function deleteTask(t, row) {
         if (!confirm("Удалить задачу «" + (t.task || "") + "»?")) return;
 
@@ -1083,17 +1232,15 @@
       })();
 
       document.addEventListener("click", function (e) {
-        document.querySelectorAll("details[open]").forEach(function (d) {
-          if (!d.contains(e.target)) {
-            d.removeAttribute("open");
-          }
-        });
-        document.querySelectorAll(".tags-toggle-menu:not(.hidden)").forEach(function (m) {
-          if (!m.contains(e.target)) {
-            m.classList.add("hidden");
-          }
-        });
+        if (tagPopup && !tagPopup.classList.contains("hidden") && !tagPopup.contains(e.target)) {
+          closeTagPopup();
+        }
       });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") closeTagPopup();
+      });
+      window.addEventListener("resize", closeTagPopup);
+      window.addEventListener("scroll", closeTagPopup, true);
     })();
 
     (function () {
@@ -1101,6 +1248,15 @@
       var form = document.getElementById("chat-form");
       var input = document.getElementById("chat-input");
       var sendBtn = document.getElementById("chat-send");
+
+      function autoGrowChat() {
+        input.style.height = "auto";
+        input.style.overflowY = "hidden";
+        input.style.height = input.scrollHeight + "px";
+      }
+
+      input.addEventListener("input", autoGrowChat);
+      autoGrowChat();
 
       input.addEventListener("keydown", function (e) {
         if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -1143,6 +1299,7 @@
 
         appendBubble("user", message);
         input.value = "";
+        autoGrowChat();
         sendBtn.disabled = true;
         appendBubble("assistant", "Печатает…");
 
