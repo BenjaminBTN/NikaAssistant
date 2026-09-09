@@ -105,60 +105,9 @@
         </div>
 
         <div class="rounded-lg border border-slate-200 bg-white p-5">
-          <h2 class="text-lg font-bold">Проблемы по типам</h2>
-          <div class="mt-5 flex items-end gap-4 border-b border-slate-200 pb-3">
-            <div class="flex w-14 flex-col items-center gap-2">
-              <div class="h-28 w-10 rounded-t bg-red-600"></div>
-              <div class="text-xs text-slate-600">Срочно</div>
-            </div>
-            <div class="flex w-14 flex-col items-center gap-2">
-              <div class="h-28 w-10 rounded-t bg-orange-500"></div>
-              <div class="text-xs text-slate-600">Зависло</div>
-            </div>
-            <div class="flex w-14 flex-col items-center gap-2">
-              <div class="h-14 w-10 rounded-t bg-blue-600"></div>
-              <div class="text-xs text-slate-600">Ожид.</div>
-            </div>
-            <div class="flex w-14 flex-col items-center gap-2">
-              <div class="h-40 w-10 rounded-t bg-emerald-600"></div>
-              <div class="text-xs text-slate-600">Контр.</div>
-            </div>
-          </div>
-          <p class="mt-4 text-sm text-slate-600">Если Recharts CDN недоступен, этот статичный график всё равно показывает распределение проблем.</p>
-        </div>
-
-        <div class="rounded-lg border border-slate-200 bg-white p-5">
           <h2 class="text-lg font-bold">Нагрузка по ответственным</h2>
-          <div class="mt-4 space-y-4">
-            <div>
-              <div class="mb-1 flex justify-between text-sm"><span>Олеся</span><span>4</span></div>
-              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-4/5 rounded bg-blue-600"></div></div>
-            </div>
-            <div>
-              <div class="mb-1 flex justify-between text-sm"><span>Настя</span><span>2</span></div>
-              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-2/5 rounded bg-blue-600"></div></div>
-            </div>
-            <div>
-              <div class="mb-1 flex justify-between text-sm"><span>Антонина</span><span>1</span></div>
-              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-1/5 rounded bg-blue-600"></div></div>
-            </div>
-            <div>
-              <div class="mb-1 flex justify-between text-sm"><span>Денис</span><span>0</span></div>
-              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-0 rounded bg-blue-600"></div></div>
-            </div>
-            <div>
-              <div class="mb-1 flex justify-between text-sm"><span>Регионы</span><span>0</span></div>
-              <div class="h-3 rounded bg-slate-100"><div class="h-3 w-0 rounded bg-blue-600"></div></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-lg border border-slate-200 bg-white p-5">
-          <h2 class="text-lg font-bold">Ручное подтверждение</h2>
-          <p class="mt-2 text-sm text-slate-600">Инструмент может предложить обновить статус, но решение подтверждает Олеся.</p>
-          <div class="mt-4 space-y-2">
-            <button class="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">Подтвердить выбранные изменения</button>
-            <button class="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Оставить в ожидании</button>
+          <div id="workload-list" class="mt-4 space-y-4">
+            <div class="text-sm text-slate-500">Загрузка…</div>
           </div>
         </div>
       </aside>
@@ -343,6 +292,42 @@
         setCount("count-stuck", counts.stuck);
         setCount("count-waiting", counts.waiting);
         setCount("count-control", counts.control);
+
+        updateWorkload();
+      }
+
+      function updateWorkload() {
+        var list = document.getElementById("workload-list");
+        if (!list) return;
+
+        var active = allTasks.filter(function (t) { return !isDone(t); });
+        var map = {};
+        active.forEach(function (t) {
+          var raw = (t.assignee || "").trim();
+          var names = raw ? raw.split(",").map(function (s) { return s.trim(); }).filter(Boolean) : ["Без ответственного"];
+          names.forEach(function (name) {
+            map[name] = (map[name] || 0) + 1;
+          });
+        });
+
+        var entries = Object.keys(map).map(function (k) { return { name: k, count: map[k] }; });
+        entries.sort(function (a, b) { return b.count - a.count; });
+
+        if (entries.length === 0) {
+          list.innerHTML = '<div class="text-sm text-slate-500">Нет активных задач</div>';
+          return;
+        }
+
+        var max = entries[0].count || 1;
+        list.innerHTML = "";
+        entries.forEach(function (e) {
+          var pct = Math.round((e.count / max) * 100);
+          var div = document.createElement("div");
+          div.innerHTML =
+            '<div class="mb-1 flex justify-between text-sm"><span>' + escapeHtml(e.name) + '</span><span>' + e.count + '</span></div>' +
+            '<div class="h-3 rounded bg-slate-100"><div class="h-3 rounded bg-blue-600 transition-all" style="width:' + pct + '%"></div></div>';
+          list.appendChild(div);
+        });
       }
 
       var FILTER_TYPES = ["urgent", "stuck", "waiting", "control"];
