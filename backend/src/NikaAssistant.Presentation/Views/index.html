@@ -433,16 +433,9 @@
         var tagsCell = document.createElement("td");
         tagsCell.className = "px-4 py-4 text-center align-top";
         var tagsWrap = document.createElement("div");
-        var tagsView = document.createElement("div");
-        tagsView.className = "tags-view flex flex-wrap justify-center gap-1 min-h-[1.25rem]";
-        renderTags(tagsView, getTaskTags(t));
-        var details = document.createElement("details");
-        details.className = "group relative mt-2";
-        var summary = document.createElement("summary");
-        summary.className = "list-none cursor-pointer select-none text-xs text-slate-500 hover:text-slate-900";
-        summary.textContent = "Изменить▾";
+
         var menu = document.createElement("div");
-        menu.className = "absolute z-10 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-2 shadow-lg";
+        menu.className = "row-tags-menu absolute z-10 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-2 shadow-lg";
         TAGS.forEach(function (tag) {
           var label = document.createElement("label");
           label.className = "flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50";
@@ -458,10 +451,42 @@
           label.appendChild(document.createTextNode(tag.key));
           menu.appendChild(label);
         });
-        details.appendChild(summary);
-        details.appendChild(menu);
+
+        var tagsView = document.createElement("div");
+        tagsView.className = "tags-view flex flex-wrap justify-center gap-1";
+        if (getTaskTags(t).length > 0) tagsView.classList.add("min-h-[1.25rem]");
+        renderTags(tagsView, getTaskTags(t));
         tagsWrap.appendChild(tagsView);
-        tagsWrap.appendChild(details);
+
+        var tagsList = getTaskTags(t);
+        if (tagsList.length === 0) {
+          var details = document.createElement("details");
+          details.className = "group relative mt-2";
+          var summary = document.createElement("summary");
+          summary.className = "list-none cursor-pointer text-xs text-slate-500 hover:text-slate-900 flex items-center justify-center";
+          summary.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+          details.appendChild(summary);
+          details.appendChild(menu);
+          tagsWrap.appendChild(details);
+        } else {
+          var menuWrap = document.createElement("div");
+          menuWrap.className = "group relative mt-2 flex justify-center";
+          menu.classList.add("tags-toggle-menu", "hidden");
+          menuWrap.appendChild(menu);
+          tagsWrap.appendChild(menuWrap);
+
+          tagsView.querySelectorAll("span").forEach(function (span) {
+            span.className += " cursor-pointer hover:ring-slate-400";
+            span.addEventListener("click", function (e) {
+              e.stopPropagation();
+              var open = !menu.classList.contains("hidden");
+              document.querySelectorAll(".tags-toggle-menu:not(.hidden)").forEach(function (m) {
+                if (m !== menu) m.classList.add("hidden");
+              });
+              menu.classList.toggle("hidden", open);
+            });
+          });
+        }
         tagsCell.appendChild(tagsWrap);
 
         var commentCell = document.createElement("td");
@@ -535,9 +560,8 @@
       }
 
       async function updateTags(t, tr) {
-        var details = tr.querySelector("details");
         var selected = [];
-        details.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+        tr.querySelectorAll('input[name="row-tag"]').forEach(function (cb) {
           if (cb.checked) selected.push(cb.value);
         });
 
@@ -734,6 +758,11 @@
         document.querySelectorAll("details[open]").forEach(function (d) {
           if (!d.contains(e.target)) {
             d.removeAttribute("open");
+          }
+        });
+        document.querySelectorAll(".tags-toggle-menu:not(.hidden)").forEach(function (m) {
+          if (!m.contains(e.target)) {
+            m.classList.add("hidden");
           }
         });
       });
