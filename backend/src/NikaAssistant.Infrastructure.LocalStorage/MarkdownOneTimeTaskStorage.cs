@@ -277,7 +277,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 continue;
             }
 
-            tasks.Add(new OneTimeTask(status, task, assignee, comment, tags, dueDate));
+            tasks.Add(new OneTimeTask(status, Unescape(task), Unescape(assignee), Unescape(comment), tags, dueDate));
         }
 
         return Task.FromResult<IReadOnlyList<OneTimeTask>>(tasks);
@@ -591,10 +591,17 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
     private static string Escape(string? value) =>
         (value ?? string.Empty)
-            .Replace("\r", string.Empty)
-            .Replace("\n", " ")
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n")
+            .Replace("\n", "\\n")
             .Replace("|", "\\|")
             .Trim();
+
+    // Обратное преобразование при чтении: последовательность "\n" в .md — это перенос строки.
+    // Строка таблицы обязана оставаться однострочной, поэтому реальные переводы строк
+    // хранятся в файле в виде escape-последовательности.
+    private static string Unescape(string? value) =>
+        (value ?? string.Empty).Replace("\\n", "\n");
 
     private static string TodayString() =>
         DateTime.Today.AddHours(19).ToString("yyyy-MM-dd HH:mm");

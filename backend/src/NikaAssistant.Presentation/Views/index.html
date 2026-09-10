@@ -2,9 +2,23 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=1440">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Проблемы дня - прототип</title>
   <style>
+    html, body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: clip;
+    }
+    body {
+      min-width: 0;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    img, svg, table {
+      max-width: 100%;
+    }
     @keyframes taskRowFlash {
       0% { background-color: #ecfdf5; }
       100% { background-color: transparent; }
@@ -14,9 +28,52 @@
     }
     .comment-view {
       display: -webkit-box;
-      -webkit-line-clamp: 5;
+      -webkit-line-clamp: 4;
+      line-clamp: 4;
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+    /* Мобильная адаптация таблицы задач: строки становятся карточками друг под другом,
+       чтобы не было горизонтальной прокрутки. */
+    @media (max-width: 767px) {
+      #tasks-table thead {
+        display: none;
+      }
+      #tasks-table,
+      #tasks-table tbody,
+      #tasks-table tr,
+      #tasks-table td {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+      }
+      #tasks-table tr:not(.due-group-header) {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 0.5rem 0;
+      }
+      #tasks-table tr.due-group-header td {
+        padding: 0.5rem 1rem !important;
+        background: #f8fafc;
+      }
+      #tasks-table td {
+        border: 0 !important;
+        padding: 0.25rem 1rem !important;
+        text-align: left !important;
+        white-space: normal !important;
+      }
+      #tasks-table td > div,
+      #tasks-table td > textarea,
+      #tasks-table td > input {
+        max-width: 100%;
+        white-space: normal !important;
+      }
+      #tasks-table .due-view {
+        white-space: normal !important;
+      }
+      #tasks-table input[type="datetime-local"] {
+        min-width: 0 !important;
+        width: 100% !important;
+      }
     }
   </style>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -24,14 +81,14 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
 </head>
-<body class="min-w-[1280px] bg-slate-100 text-slate-900">
+<body class="w-full min-w-0 overflow-x-clip bg-slate-100 text-slate-900">
   <header class="border-b border-slate-200 bg-white">
-    <div class="mx-auto flex w-[1280px] items-center justify-between px-8 py-5">
+    <div class="mx-auto flex w-full max-w-none flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div class="text-sm font-medium text-slate-500">Личный инструмент Олеси</div>
         <h1 class="mt-1 text-3xl font-bold tracking-normal text-slate-950">Задачи дня</h1>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
         <div class="rounded-lg border border-slate-200 px-4 py-2 text-right">
           <div class="text-xs text-slate-500">Сегодня</div>
           <div id="today-date" class="text-sm font-semibold">—</div>
@@ -41,8 +98,8 @@
     </div>
   </header>
 
-  <main class="mx-auto w-[1280px] px-8 py-8">
-    <section class="grid grid-cols-4 gap-4">
+  <main class="mx-auto w-full max-w-none min-w-0 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <div id="card-urgent" class="cursor-pointer rounded-lg border border-red-200 bg-red-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Срочно</div>
         <div id="count-urgent" class="mt-2 text-4xl font-bold text-slate-950">0</div>
@@ -65,8 +122,8 @@
       </div>
     </section>
 
-    <section class="mt-6 grid grid-cols-[1fr_360px] gap-6">
-      <div class="rounded-lg border border-slate-200 bg-white">
+    <section class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div class="w-full min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <div>
             <h2 class="text-lg font-bold">Список задач</h2>
@@ -74,7 +131,7 @@
           </div>
         </div>
 
-        <table class="w-full table-fixed text-left">
+        <table id="tasks-table" class="w-full min-w-0 text-left md:table-fixed">
           <thead class="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th class="w-[8%] px-4 py-3 text-center font-semibold">Статус</th>
@@ -94,7 +151,7 @@
         </table>
       </div>
 
-      <aside class="space-y-6">
+      <aside class="w-full min-w-0 space-y-6">
         <div class="rounded-lg border border-slate-200 bg-white">
           <div class="border-b border-slate-200 px-5 py-4">
             <h2 class="text-lg font-bold">Чат с ассистентом</h2>
@@ -102,11 +159,11 @@
           <div id="chat-log" class="h-[300px] space-y-3 overflow-y-auto px-5 py-4">
             <div class="text-sm text-slate-400">История сообщений пуста.</div>
           </div>
-          <form id="chat-form" class="flex items-end gap-3 border-t border-slate-200 px-5 py-4">
+          <form id="chat-form" class="flex min-w-0 items-end gap-3 border-t border-slate-200 px-5 py-4">
             <textarea id="chat-input" rows="1" required placeholder="Введите сообщение…"
-              class="max-h-none flex-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
+              class="max-h-none min-w-0 flex-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
             <button type="submit" id="chat-send"
-              class="rounded-lg bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">Отправить</button>
+              class="shrink-0 rounded-lg bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">Отправить</button>
           </form>
         </div>
 
@@ -117,13 +174,13 @@
           </div>
         </div>
 
-        <button id="finish-day-btn" type="button" class="mx-auto block w-[80%] rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">Завершить день</button>
+        <button id="finish-day-btn" type="button" class="mx-auto block w-full max-w-[320px] rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">Завершить день</button>
       </aside>
     </section>
   </main>
 
-  <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50">
-    <div class="w-[480px] rounded-xl bg-white p-6 shadow-xl">
+  <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div class="w-full max-w-[480px] rounded-xl bg-white p-6 shadow-xl">
       <h3 class="text-lg font-bold text-slate-950">Новая задача</h3>
       <form id="task-form" class="mt-4 space-y-4">
         <div>
@@ -148,10 +205,27 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Комментарий</label>
-          <input name="comment" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+          <textarea name="comment" rows="3" placeholder="Можно с переносами строк…"
+            class="mt-1 block w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
         </div>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" id="task-cancel" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Отмена</button>
+          <button type="submit" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="comment-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div class="w-[40vw] rounded-xl bg-white p-6 shadow-xl">
+      <h3 class="text-lg font-bold text-slate-950">Комментарий</h3>
+      <form id="comment-form" class="mt-4 space-y-4">
+        <div>
+          <textarea id="comment-text" rows="8" placeholder="Введите комментарий…"
+            class="mt-1 block w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal leading-snug text-slate-700 focus:border-slate-950 focus:outline-none"></textarea>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 pt-2">
+          <button type="button" id="comment-cancel" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Отмена</button>
           <button type="submit" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Сохранить</button>
         </div>
       </form>
@@ -1024,47 +1098,60 @@
         cell.appendChild(view);
       }
 
-      function beginCommentEdit(t, cell, view) {
-        if (cell.querySelector("textarea")) return;
+      var commentModal = document.getElementById("comment-modal");
+      var commentForm = document.getElementById("comment-form");
+      var commentText = document.getElementById("comment-text");
+      var commentCancelBtn = document.getElementById("comment-cancel");
+      var commentEditTask = null;
+      var commentEditCell = null;
 
-        var textarea = document.createElement("textarea");
-        textarea.className = "block w-[calc(100%+8px)] -mx-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-[13px] font-normal leading-snug text-slate-700 focus:border-slate-950 focus:outline-none";
-        textarea.rows = 1;
-        textarea.value = t.comment || "";
-        cell.replaceChild(textarea, view);
-        autoGrow(textarea);
-        textarea.focus();
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      function openCommentModal(t, cell) {
+        commentEditTask = t;
+        commentEditCell = cell;
+        commentText.value = t.comment || "";
+        commentModal.style.display = "flex";
+        setTimeout(function () {
+          commentText.focus();
+          commentText.setSelectionRange(commentText.value.length, commentText.value.length);
+        }, 0);
+      }
 
-        var finished = false;
-        function commit(save) {
-          if (finished) return;
-          finished = true;
-          var newValue = textarea.value;
-          if (save && newValue !== (t.comment || "")) {
-            updateComment(t, cell, newValue);
-          } else {
-            renderComment(cell, t);
-          }
+      function closeCommentModal() {
+        commentModal.style.display = "none";
+        commentEditTask = null;
+        commentEditCell = null;
+      }
+
+      commentCancelBtn.addEventListener("click", closeCommentModal);
+      commentModal.addEventListener("click", function (e) {
+        if (e.target === commentModal) closeCommentModal();
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && commentModal.style.display === "flex") closeCommentModal();
+      });
+      commentForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (!commentEditTask) {
+          closeCommentModal();
+          return;
         }
+        var t = commentEditTask;
+        var cell = commentEditCell;
+        var newValue = commentText.value;
+        closeCommentModal();
+        if (newValue !== (t.comment || "")) {
+          updateComment(t, cell, newValue);
+        }
+      });
 
-        textarea.addEventListener("input", function () { autoGrow(textarea); });
-        textarea.addEventListener("blur", function () { commit(true); });
-        textarea.addEventListener("keydown", function (e) {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            textarea.blur();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            commit(false);
-          }
-        });
+      function beginCommentEdit(t, cell) {
+        openCommentModal(t, cell);
       }
 
       async function updateComment(t, cell, newComment) {
         var previous = t.comment;
         t.comment = newComment;
-        renderComment(cell, t);
+        refreshCommentCell(cell, t);
 
         try {
           var res = await fetch("/UpdateTask", {
@@ -1084,13 +1171,23 @@
 
           if (!res.ok) {
             t.comment = previous;
-            renderComment(cell, t);
+            refreshCommentCell(cell, t);
             alert("Не удалось обновить комментарий");
           }
         } catch (err) {
           t.comment = previous;
-          renderComment(cell, t);
+          refreshCommentCell(cell, t);
           alert("Ошибка при обновлении комментария");
+        }
+      }
+
+      // Ячейка могла отсоединиться от DOM, пока был открыт попап
+      // (например, список перерисовался) — тогда перерисовываем весь список.
+      function refreshCommentCell(cell, t) {
+        if (cell && cell.isConnected) {
+          renderComment(cell, t);
+        } else {
+          renderTasks();
         }
       }
 

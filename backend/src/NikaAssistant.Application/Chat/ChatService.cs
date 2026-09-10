@@ -100,7 +100,7 @@ public sealed class ChatService
             // а пользователю показываем понятный текст вместо сырого JSON ошибки.
             _logger.LogWarning("Chat provider error: {Detail}", response.Content);
             return new ChatResult(
-                "Провайдер модели временно недоступен, попробуйте повторить через минуту. Задача не добавлена.",
+                "Провайдер модели временно недоступен, попробуйте повторить через минуту.",
                 Array.Empty<OneTimeTask>());
         }
         messages.Add(ToAssistantMessage(response));
