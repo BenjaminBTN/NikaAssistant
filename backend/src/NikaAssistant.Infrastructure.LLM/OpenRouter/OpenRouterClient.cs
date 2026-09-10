@@ -16,6 +16,7 @@ public sealed class OpenRouterClient : ILlmClient
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _model;
+    private readonly string[] _fallbackModels;
     private readonly string _referer;
     private readonly string _title;
 
@@ -25,6 +26,11 @@ public sealed class OpenRouterClient : ILlmClient
         _apiKey = configuration["OpenRouter:ApiKey"]
             ?? throw new InvalidOperationException("OpenRouter:ApiKey не задан в конфигурации.");
         _model = configuration["OpenRouter:Model"] ?? "openai/gpt-4o";
+        _fallbackModels = configuration.GetSection("OpenRouter:FallbackModels").GetChildren()
+            .Select(c => c.Value)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!)
+            .ToArray();
         _referer = configuration["OpenRouter:Referer"] ?? "https://nika-assistant.example.com";
         _title = configuration["OpenRouter:Title"] ?? "NikaAssistant";
         _httpClient.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
@@ -38,7 +44,16 @@ public sealed class OpenRouterClient : ILlmClient
         var requestMessages = messages.Select(ToRequestMessage).ToArray();
         var toolDefinitions = tools?.Select(ToToolDefinition).ToArray();
 
-        var request = new ChatCompletionRequest(_model, requestMessages, toolDefinitions);
+        // OpenRouter сам переберёт модели по порядку, если основная отвалилась (DEGRADED, rate limit и т.п.).
+        string[]? models = null;
+        if (_fallbackModels.Length > 0)
+        {
+            models = new string[_fallbackModels.Length + 1];
+            models[0] = _model;
+            Array.Copy(_fallbackModels, 0, models, 1, _fallbackModels.Length);
+        }
+
+        var request = new ChatCompletionRequest(_model, requestMessages, toolDefinitions, models);
 
         var json = JsonSerializer.Serialize(request, JsonOptions);
 
@@ -61,7 +76,8 @@ public sealed class OpenRouterClient : ILlmClient
             };
             return new LlmResponse(
                 $"Ошибка OpenRouter: {(int)response.StatusCode} {response.StatusCode}{hint} {errorBody}".Trim(),
-                Array.Empty<LlmToolCall>());
+                Array.Empty<LlmToolCall>(),
+                IsError: true);
         }
 
         var result = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(
@@ -93,7 +109,8 @@ public sealed class OpenRouterClient : ILlmClient
     private sealed record ChatCompletionRequest(
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("messages")] RequestMessage[] Messages,
-        [property: JsonPropertyName("tools")] ToolDefinition[]? Tools = null);
+        [property: JsonPropertyName("tools")] ToolDefinition[]? Tools = null,
+        [property: JsonPropertyName("models")] string[]? Models = null);
 
     private sealed record RequestMessage(
         [property: JsonPropertyName("role")] string Role,

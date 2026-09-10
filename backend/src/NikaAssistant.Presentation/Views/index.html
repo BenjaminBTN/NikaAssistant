@@ -297,17 +297,18 @@
         var p = parseDue(getDueDate(t));
         if (!p) return "today";
         var day = startOfDay(p.date).getTime();
-        if (day <= todayMidnight.getTime()) return "today";
+        if (day < todayMidnight.getTime()) return "overdue";
+        if (day === todayMidnight.getTime()) return "today";
         if (day === tomorrowMidnight.getTime()) return "tomorrow";
         return "later";
       }
 
-      // В столбце "Срок": Today/Tomorrow — только время, Later — только дата.
+      // В столбце "Срок": Today/Tomorrow — только время, Overdue/Later — только дата.
       function formatDueCell(t, bucket) {
         var raw = getDueDate(t);
         var p = parseDue(raw);
         if (!p) return "—";
-        if (bucket === "later") {
+        if (bucket === "later" || bucket === "overdue") {
           var dd = String(p.date.getDate()).padStart(2, "0");
           var mm = String(p.date.getMonth() + 1).padStart(2, "0");
           return dd + "." + mm + "." + p.date.getFullYear();
@@ -327,7 +328,7 @@
         return dd + "." + mm + "." + yyyy + " " + hh + ":" + min;
       }
 
-      var groupCollapsed = { today: false, tomorrow: false, later: false };
+      var groupCollapsed = { overdue: false, today: false, tomorrow: false, later: false };
 
       function taskIdentity(t) {
         return {
@@ -449,6 +450,7 @@
       });
 
       var DUE_GROUPS = [
+        { key: "overdue", title: "Ранее (нужно перенести)" },
         { key: "today", title: "Сегодня" },
         { key: "tomorrow", title: "Завтра" },
         { key: "later", title: "Позднее" }
@@ -518,7 +520,7 @@
         var todayMidnight = startOfDay(now);
         var tomorrowMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000);
 
-        var buckets = { today: [], tomorrow: [], later: [] };
+        var buckets = { overdue: [], today: [], tomorrow: [], later: [] };
         visible.forEach(function (t) {
           var b = dueBucket(t, todayMidnight, tomorrowMidnight);
           buckets[b].push(t);
@@ -530,27 +532,16 @@
           var ta = pa ? pa.date.getTime() : 0, tb = pb ? pb.date.getTime() : 0;
           return ta - tb;
         }
+        buckets.overdue.sort(sortByTime);
         buckets.today.sort(sortByTime);
         buckets.tomorrow.sort(sortByTime);
         buckets.later.sort(sortByTime);
 
         DUE_GROUPS.forEach(function (group) {
           var list = buckets[group.key];
-          if (currentFilter && list.length === 0) return;
+          if (list.length === 0) return;
           tbody.appendChild(createGroupHeader(group, list.length));
           if (groupCollapsed[group.key]) return;
-          if (list.length === 0) {
-            var emptyTr = document.createElement("tr");
-            emptyTr.className = "border-b border-slate-200";
-            emptyTr.setAttribute("data-group-row", group.key);
-            var emptyTd = document.createElement("td");
-            emptyTd.setAttribute("colspan", "7");
-            emptyTd.className = "px-4 py-3 text-sm text-slate-400";
-            emptyTd.textContent = "Нет задач";
-            emptyTr.appendChild(emptyTd);
-            tbody.appendChild(emptyTr);
-            return;
-          }
           list.forEach(function (t) {
             appendTaskRow(tbody, t, group.key);
           });
