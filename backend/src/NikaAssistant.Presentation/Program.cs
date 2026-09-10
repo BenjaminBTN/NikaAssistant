@@ -73,6 +73,12 @@ app.MapPost("/DeleteTask", async (DeleteTaskRequest request, DeleteTaskHandler h
     return Results.Ok();
 });
 
+app.MapPost("/ArchiveCompleted", async (IOneTimeTaskStorage storage) =>
+{
+    var archived = await storage.ArchiveCompletedAsync();
+    return Results.Ok(new { archived });
+});
+
 app.MapPost("/UpdateTask", async (UpdateTaskRequest request, UpdateTaskHandler handler) =>
 {
     await handler.UpdateTaskAsync(request);

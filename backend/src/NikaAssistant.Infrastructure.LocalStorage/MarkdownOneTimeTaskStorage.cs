@@ -91,6 +91,53 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         return Task.CompletedTask;
     }
 
+    public Task<int> ArchiveCompletedAsync(CancellationToken cancellationToken = default)
+    {
+        lock (Sync)
+        {
+            if (!File.Exists(_filePath))
+            {
+                return Task.FromResult(0);
+            }
+
+            MigrateSchema();
+
+            var lines = File.ReadAllLines(_filePath).ToList();
+            var archivedRows = new List<string>();
+            var remaining = new List<string>(lines.Count);
+
+            foreach (var line in lines)
+            {
+                var parsed = ParseRow(line);
+                if (parsed is not null && IsCompleted(parsed.Value.Status))
+                {
+                    archivedRows.Add(line);
+                }
+                else
+                {
+                    remaining.Add(line);
+                }
+            }
+
+            if (archivedRows.Count == 0)
+            {
+                return Task.FromResult(0);
+            }
+
+            File.WriteAllLines(_filePath, remaining);
+            foreach (var row in archivedRows)
+            {
+                AppendToArchive(row);
+            }
+
+            return Task.FromResult(archivedRows.Count);
+        }
+    }
+
+    private static bool IsCompleted(string? status) =>
+        !string.IsNullOrEmpty(status) &&
+        status.IndexOf("x", StringComparison.OrdinalIgnoreCase) >= 0;
+
     public Task UpdateAsync(UpdateTaskRequest request, CancellationToken cancellationToken = default)
     {
         lock (Sync)

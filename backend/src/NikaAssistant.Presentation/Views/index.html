@@ -110,6 +110,8 @@
             <div class="text-sm text-slate-500">Загрузка…</div>
           </div>
         </div>
+
+        <button id="finish-day-btn" type="button" class="mx-auto block w-[80%] rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">Завершить день</button>
       </aside>
     </section>
   </main>
@@ -1214,6 +1216,31 @@
       function clearPlaceholder(tbody) {
         var placeholder = tbody.querySelector(".tasks-placeholder");
         if (placeholder) placeholder.remove();
+      }
+
+      var finishDayBtn = document.getElementById("finish-day-btn");
+      if (finishDayBtn) {
+        finishDayBtn.addEventListener("click", async function () {
+          var doneCount = allTasks.filter(isDone).length;
+          if (doneCount === 0) {
+            alert("Нет выполненных задач для архивации");
+            return;
+          }
+          if (!confirm("Хорошая работа!\nЗавершить день? Будет архивировано выполненных задач: " + doneCount + ".")) return;
+          finishDayBtn.disabled = true;
+          try {
+            var res = await fetch("/ArchiveCompleted", { method: "POST" });
+            if (res.ok) {
+              await window.loadTasks();
+            } else {
+              alert("Не удалось завершить день");
+            }
+          } catch (err) {
+            alert("Ошибка при завершении дня");
+          } finally {
+            finishDayBtn.disabled = false;
+          }
+        });
       }
 
       window.appendTask = function (t) {
