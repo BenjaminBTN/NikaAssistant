@@ -12,6 +12,12 @@
     .task-row-new {
       animation: taskRowFlash 1.5s ease-out;
     }
+    .comment-view {
+      display: -webkit-box;
+      -webkit-line-clamp: 5;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
   </style>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -97,7 +103,7 @@
             <div class="text-sm text-slate-400">История сообщений пуста.</div>
           </div>
           <form id="chat-form" class="flex items-end gap-3 border-t border-slate-200 px-5 py-4">
-            <textarea id="chat-input" rows="2" required placeholder="Введите сообщение…"
+            <textarea id="chat-input" rows="1" required placeholder="Введите сообщение…"
               class="max-h-none flex-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
             <button type="submit" id="chat-send"
               class="rounded-lg bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">Отправить</button>
@@ -125,6 +131,10 @@
           <input name="task" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
         </div>
         <div>
+          <label class="block text-sm font-medium text-slate-700">Срок исполнения</label>
+          <input name="dueDate" id="task-due" type="datetime-local" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+        </div>
+        <div>
           <label class="block text-sm font-medium text-slate-700">Ответственный</label>
           <input name="assignee" id="task-assignee" placeholder="По умолчанию" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
         </div>
@@ -135,10 +145,6 @@
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Зависло" /> Зависло</label>
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ожидание" /> Ожидание</label>
           </div>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700">Срок исполнения</label>
-          <input name="dueDate" type="datetime-local" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Комментарий</label>
@@ -175,12 +181,27 @@
       var form = document.getElementById("task-form");
 
       function showModal() {
+        ensureDefaultDueDate();
         modal.style.display = "flex";
       }
 
       function hideModal() {
         modal.style.display = "none";
       }
+
+      // Значение по умолчанию для "Срок исполнения" — сегодня 19:00
+      // (совпадает с TodayString/NormalizeDueDate на бэкенде).
+      function ensureDefaultDueDate() {
+        var input = document.getElementById("task-due") || (form ? form.dueDate : null);
+        if (!input || input.value) return;
+        var d = new Date();
+        d.setHours(19, 0, 0, 0);
+        function pad(n) { return String(n).padStart(2, "0"); }
+        input.value = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+          "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+      }
+
+      ensureDefaultDueDate();
 
       openBtn.addEventListener("click", showModal);
       cancelBtn.addEventListener("click", hideModal);
@@ -661,7 +682,7 @@
         cell.innerHTML = "";
         var done = (t.status || "").indexOf("x") !== -1;
         var view = document.createElement("div");
-        view.className = "task-title cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm font-normal leading-snug text-slate-900" +
+        view.className = "task-title cursor-text whitespace-pre-wrap rounded-lg border border-transparent px-1 py-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm font-normal leading-snug text-slate-900" +
           (done ? " line-through text-slate-400" : "");
         view.textContent = t.task || "";
         view.title = "Нажмите, чтобы изменить задачу";
@@ -675,7 +696,8 @@
         if (cell.querySelector("textarea")) return;
 
         var textarea = document.createElement("textarea");
-        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.className = "block w-[calc(100%+8px)] -mx-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm font-normal leading-snug text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.rows = 1;
         textarea.value = t.task || "";
         cell.replaceChild(textarea, view);
         autoGrow(textarea);
@@ -708,6 +730,7 @@
       }
 
       function autoGrow(textarea) {
+        textarea.rows = 1;
         textarea.style.height = "auto";
         textarea.style.height = textarea.scrollHeight + "px";
       }
@@ -748,7 +771,7 @@
       function renderAssignee(cell, t) {
         cell.innerHTML = "";
         var view = document.createElement("div");
-        view.className = "assignee-name cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm font-normal leading-snug text-slate-900";
+        view.className = "assignee-name cursor-text whitespace-pre-wrap rounded-lg border border-transparent px-1 py-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm font-normal leading-snug text-slate-900";
         view.textContent = t.assignee || "";
         view.title = "Нажмите, чтобы изменить ответственного";
         view.addEventListener("click", function () {
@@ -761,7 +784,8 @@
         if (cell.querySelector("textarea")) return;
 
         var textarea = document.createElement("textarea");
-        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.className = "block w-[calc(100%+8px)] -mx-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm font-normal leading-snug text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.rows = 1;
         textarea.value = t.assignee || "";
         cell.replaceChild(textarea, view);
         autoGrow(textarea);
@@ -989,9 +1013,11 @@
       function renderComment(cell, t) {
         cell.innerHTML = "";
         var view = document.createElement("div");
-        view.className = "comment-view cursor-text whitespace-pre-wrap rounded px-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-[13px] leading-snug text-slate-700";
+        view.className = "comment-view cursor-text whitespace-pre-wrap rounded-lg border border-transparent px-1 py-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-[13px] font-normal leading-snug text-slate-700";
         view.textContent = t.comment || "";
-        view.title = "Нажмите, чтобы изменить комментарий";
+        view.title = (t.comment || "")
+          ? (t.comment + "\n\nНажмите, чтобы изменить комментарий")
+          : "Нажмите, чтобы изменить комментарий";
         view.addEventListener("click", function () {
           beginCommentEdit(t, cell, view);
         });
@@ -1002,7 +1028,8 @@
         if (cell.querySelector("textarea")) return;
 
         var textarea = document.createElement("textarea");
-        textarea.className = "w-full resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-[13px] leading-snug font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.className = "block w-[calc(100%+8px)] -mx-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-[13px] font-normal leading-snug text-slate-700 focus:border-slate-950 focus:outline-none";
+        textarea.rows = 1;
         textarea.value = t.comment || "";
         cell.replaceChild(textarea, view);
         autoGrow(textarea);
@@ -1087,7 +1114,7 @@
         view.className = "due-view cursor-text whitespace-nowrap rounded px-1 -mx-1 hover:bg-slate-100 text-[13px] leading-snug text-slate-700";
         view.textContent = formatDueCell(t, bucket);
         var tip = formatDueTooltip(t);
-        view.title = tip ? tip + ". Нажмите, чтобы изменить срок" : "Нажмите, чтобы изменить срок";
+        view.title = tip ? tip + "\n\nНажмите, чтобы изменить срок" : "Нажмите, чтобы изменить срок";
         view.addEventListener("click", function () {
           beginDueEdit(t, cell, bucket, view);
         });
@@ -1295,6 +1322,7 @@
       var sendBtn = document.getElementById("chat-send");
 
       function autoGrowChat() {
+        input.rows = 1;
         input.style.height = "auto";
         input.style.overflowY = "hidden";
         input.style.height = input.scrollHeight + "px";
