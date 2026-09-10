@@ -31,7 +31,7 @@ public sealed class ChatService
             "task": { "type": "string", "description": "Текст задачи" },
             "assignee": { "type": "string", "description": "Ответственный за задачу" },
             "comment": { "type": "string", "description": "Комментарий к задаче" },
-            "dueDate": { "type": "string", "description": "Срок исполнения в формате yyyy-MM-dd HH:mm" },
+            "dueDate": { "type": "string", "description": "Срок исполнения в формате yyyy-MM-dd HH:mm. Если пользователь не указал срок или время — не передавай это поле (по умолчанию будет установлено сегодня 19:00). Если указана только дата без времени — передавай дату с временем 19:00" },
             "tags": { "type": "array", "items": { "type": "string", "enum": ["Срочно", "Зависло", "Ожидание"] }, "description": "Теги задачи" }
           },
           "required": ["task"]

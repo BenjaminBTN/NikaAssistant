@@ -530,7 +530,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             .Trim();
 
     private static string TodayString() =>
-        DateTime.Today.ToString("yyyy-MM-dd HH:mm");
+        DateTime.Today.AddHours(19).ToString("yyyy-MM-dd HH:mm");
 
     public static string NormalizeDueDate(string? value)
     {
@@ -542,6 +542,12 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         var trimmed = value.Trim().Replace('T', ' ');
         if (DateTime.TryParse(trimmed, out var dt))
         {
+            // Если в строке нет времени (только дата) — ставим 19:00.
+            if (!trimmed.Contains(':'))
+            {
+                return dt.Date.AddHours(19).ToString("yyyy-MM-dd HH:mm");
+            }
+
             return dt.ToString("yyyy-MM-dd HH:mm");
         }
 

@@ -124,7 +124,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Ответственный</label>
-          <input name="assignee" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+          <input name="assignee" id="task-assignee" placeholder="По умолчанию" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Теги</label>
@@ -183,6 +183,20 @@
       openBtn.addEventListener("click", showModal);
       cancelBtn.addEventListener("click", hideModal);
 
+      // Подсказка DefaultAssignee в поле "Ответственный" (как в чате: пустое = DefaultAssignee).
+      try {
+        fetch("/Config")
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (cfg) {
+            if (cfg && typeof cfg.defaultAssignee === "string" && cfg.defaultAssignee) {
+              var assigneeInput = document.getElementById("task-assignee");
+              if (assigneeInput) assigneeInput.placeholder = cfg.defaultAssignee + " (по умолчанию)";
+              window.defaultAssignee = cfg.defaultAssignee;
+            }
+          })
+          .catch(function () {});
+      } catch (e) {}
+
       form.addEventListener("submit", async function (e) {
         e.preventDefault();
 
@@ -220,7 +234,7 @@
             } else if (window.appendTask) {
               window.appendTask({
                 task: payload.task,
-                assignee: payload.assignee,
+                assignee: payload.assignee || window.defaultAssignee || "",
                 comment: payload.comment,
                 tags: payload.tags || [],
                 dueDate: payload.dueDate || "",
@@ -297,6 +311,18 @@
           return dd + "." + mm + "." + p.date.getFullYear();
         }
         return p.time || "—";
+      }
+
+      // Тултип столбца "Срок": всегда дд.мм.гггг чч:мм.
+      function formatDueTooltip(t) {
+        var p = parseDue(getDueDate(t));
+        if (!p) return "";
+        var dd = String(p.date.getDate()).padStart(2, "0");
+        var mm = String(p.date.getMonth() + 1).padStart(2, "0");
+        var yyyy = p.date.getFullYear();
+        var hh = String(p.date.getHours()).padStart(2, "0");
+        var min = String(p.date.getMinutes()).padStart(2, "0");
+        return dd + "." + mm + "." + yyyy + " " + hh + ":" + min;
       }
 
       var groupCollapsed = { today: false, tomorrow: false, later: false };
@@ -1067,7 +1093,8 @@
         var view = document.createElement("div");
         view.className = "due-view cursor-text whitespace-nowrap rounded px-1 -mx-1 hover:bg-slate-100 text-[13px] leading-snug text-slate-700";
         view.textContent = formatDueCell(t, bucket);
-        view.title = (getDueDate(t) || "") + ". Нажмите, чтобы изменить срок";
+        var tip = formatDueTooltip(t);
+        view.title = tip ? tip + ". Нажмите, чтобы изменить срок" : "Нажмите, чтобы изменить срок";
         view.addEventListener("click", function () {
           beginDueEdit(t, cell, bucket, view);
         });
