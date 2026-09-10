@@ -1418,6 +1418,39 @@
       var input = document.getElementById("chat-input");
       var sendBtn = document.getElementById("chat-send");
 
+      var replyAudioCtx = null;
+      function ensureReplyAudio() {
+        try {
+          var Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) return null;
+          if (!replyAudioCtx) replyAudioCtx = new Ctx();
+          if (replyAudioCtx.state === "suspended") replyAudioCtx.resume();
+          return replyAudioCtx;
+        } catch (e) { return null; }
+      }
+
+      // Короткий системный "динь" через Web Audio — без внешних файлов.
+      function playReplySound() {
+        var ctx = ensureReplyAudio();
+        if (!ctx) return;
+        try {
+          var t0 = ctx.currentTime;
+          [[880, 0], [1318.5, 0.12]].forEach(function (pair) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(pair[0], t0 + pair[1]);
+            gain.gain.setValueAtTime(0.0001, t0 + pair[1]);
+            gain.gain.exponentialRampToValueAtTime(0.25, t0 + pair[1] + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t0 + pair[1] + 0.14);
+            osc.start(t0 + pair[1]);
+            osc.stop(t0 + pair[1] + 0.16);
+          });
+        } catch (e) { /* звук не критичен */ }
+      }
+
       function autoGrowChat() {
         input.rows = 1;
         input.style.height = "auto";
@@ -1471,6 +1504,7 @@
         input.value = "";
         autoGrowChat();
         sendBtn.disabled = true;
+        ensureReplyAudio();
         appendBubble("assistant", "Печатает…");
 
         try {
@@ -1485,6 +1519,7 @@
           if (res.ok) {
             var data = await res.json();
             last.textContent = data.answer || "(пустой ответ)";
+            playReplySound();
 
             if (Array.isArray(data.addedTasks) && data.addedTasks.length > 0 && window.appendTask) {
               data.addedTasks.forEach(function (t) {

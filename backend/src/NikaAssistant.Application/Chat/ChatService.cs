@@ -100,7 +100,7 @@ public sealed class ChatService
             // а пользователю показываем понятный текст вместо сырого JSON ошибки.
             _logger.LogWarning("Chat provider error: {Detail}", response.Content);
             return new ChatResult(
-                "Провайдер модели временно недоступен, попробуйте повторить через минуту.",
+                ProviderErrorMessage(response),
                 Array.Empty<OneTimeTask>());
         }
         messages.Add(ToAssistantMessage(response));
@@ -186,8 +186,8 @@ public sealed class ChatService
                 // чтобы повторный запрос не создал дубликаты.
                 SaveHistory(messages);
                 var note = addedTasks.Count > 0
-                    ? $"Задача добавлена ({addedTasks.Count}), но итоговый ответ получить не удалось из-за временного сбоя провайдера."
-                    : "Временный сбой провайдера при получении ответа. Попробуйте повторить через минуту.";
+                    ? $"Задача добавлена ({addedTasks.Count}), но итоговый ответ получить не удалось: {ProviderErrorShort(final)}. Подождите минуту и попросите подтвердить."
+                    : ProviderErrorMessage(final);
                 return new ChatResult(note, addedTasks);
             }
             messages.Add(new LlmMessage("assistant", final.Content ?? string.Empty));
@@ -272,6 +272,22 @@ public sealed class ChatService
         string.IsNullOrEmpty(value) ? "(пусто)"
         : value.Length <= maxLength ? value
         : value.Substring(0, maxLength) + "…";
+
+    private static string ProviderErrorMessage(LlmResponse response) => response.ErrorKind switch
+    {
+        LlmErrorKind.RateLimited =>
+            "Слишком много запросов к модели (ошибка 429). Дождитесь сброса лимита и попробуйте снова.",
+        LlmErrorKind.InsufficientCredits =>
+            "Закончился баланс аккаунта (ошибка 402). Пополните баланс и попробуйте снова.",
+        _ => "Провайдер модели временно недоступен, попробуйте повторить через минуту.",
+    };
+
+    private static string ProviderErrorShort(LlmResponse response) => response.ErrorKind switch
+    {
+        LlmErrorKind.RateLimited => "превышен лимит запросов к модели (429)",
+        LlmErrorKind.InsufficientCredits => "закончился баланс аккаунта (402)",
+        _ => "временный сбой провайдера",
+    };
 
     private static LlmMessage ToAssistantMessage(LlmResponse response)
     {

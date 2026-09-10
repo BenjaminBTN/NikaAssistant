@@ -71,16 +71,23 @@ public sealed class OpenRouterClient : ILlmClient
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            var hint = response.StatusCode switch
+            var errorKind = response.StatusCode switch
             {
-                System.Net.HttpStatusCode.PaymentRequired => " Возможно, закончился баланс аккаунта OpenRouter.",
-                (System.Net.HttpStatusCode)429 => " Превышен лимит запросов (rate limit) — подождите и попробуйте снова.",
+                System.Net.HttpStatusCode.PaymentRequired => LlmErrorKind.InsufficientCredits,
+                (System.Net.HttpStatusCode)429 => LlmErrorKind.RateLimited,
+                _ => LlmErrorKind.ProviderError
+            };
+            var hint = errorKind switch
+            {
+                LlmErrorKind.InsufficientCredits => " Возможно, закончился баланс аккаунта.",
+                LlmErrorKind.RateLimited => " Превышен лимит запросов — подождите и попробуйте снова.",
                 _ => string.Empty
             };
             return new LlmResponse(
                 $"Ошибка OpenRouter: {(int)response.StatusCode} {response.StatusCode}{hint} {errorBody}".Trim(),
                 Array.Empty<LlmToolCall>(),
-                IsError: true);
+                IsError: true,
+                ErrorKind: errorKind);
         }
 
         var result = await response.Content.ReadFromJsonAsync<ChatCompletionResponse>(
