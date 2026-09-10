@@ -1,6 +1,6 @@
 using NikaAssistant.Contracts;
 
-namespace NikaAssistant.Infrastructure.LocalStorage;
+namespace NikaAssistant.Application.Abstractions;
 
 public interface IOneTimeTaskStorage
 {

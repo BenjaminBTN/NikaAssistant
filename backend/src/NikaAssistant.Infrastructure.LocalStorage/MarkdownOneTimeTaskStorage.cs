@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
+using NikaAssistant.Application.Abstractions;
 using NikaAssistant.Contracts;
-using System.Globalization;
+using NikaAssistant.Domain;
 
 namespace NikaAssistant.Infrastructure.LocalStorage;
 
@@ -48,10 +49,10 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
     public Task AddAsync(AddTaskRequest request, CancellationToken cancellationToken = default)
     {
-        request = request with { Task = NormalizeTaskTitle(request.Task) };
+        request = request with { Task = TaskNormalizer.NormalizeTaskTitle(request.Task) };
         var assignee = ResolveAssignee(request.Assignee);
         var tags = request.Tags == null ? "" : string.Join(", ", request.Tags.Select(Escape));
-        var dueDate = NormalizeDueDate(request.DueDate);
+        var dueDate = TaskNormalizer.NormalizeDueDate(request.DueDate);
         var row = BuildRow("[ ]", request.Task, dueDate, assignee, tags, request.Comment);
 
         lock (Sync)
@@ -191,7 +192,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var newComment = request.NewComment ?? parsed.Comment;
             var newDueDate = string.IsNullOrWhiteSpace(request.NewDueDate)
                 ? parsed.DueDate
-                : NormalizeDueDate(request.NewDueDate);
+                : TaskNormalizer.NormalizeDueDate(request.NewDueDate);
 
             lines[index] = BuildRow(request.NewStatus, newTask, newDueDate, newAssignee, newTags, newComment);
             File.WriteAllLines(_filePath, lines);
@@ -250,7 +251,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             if (hasDueDateColumn)
             {
                 dueDate = string.IsNullOrWhiteSpace(parsed.Value.DueDate)
-                    ? TodayString()
+                    ? TaskNormalizer.TodayString()
                     : parsed.Value.DueDate;
                 comment = parsed.Value.Comment;
                 tags = string.IsNullOrWhiteSpace(parsed.Value.Tags)
@@ -259,7 +260,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             }
             else if (hasTagsColumn)
             {
-                dueDate = TodayString();
+                dueDate = TaskNormalizer.TodayString();
                 comment = parsed.Value.Comment;
                 tags = string.IsNullOrWhiteSpace(parsed.Value.Tags)
                     ? new List<string>()
@@ -267,7 +268,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             }
             else
             {
-                dueDate = TodayString();
+                dueDate = TaskNormalizer.TodayString();
                 comment = parsed.Value.Tags;
                 tags = new List<string>();
             }
@@ -387,7 +388,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
         // DueDate проверяем только если он передан (обратная совместимость).
         if (!string.IsNullOrWhiteSpace(request.DueDate) &&
-            NormalizeDueDate(parsed.DueDate) != NormalizeDueDate(request.DueDate))
+            TaskNormalizer.NormalizeDueDate(parsed.DueDate) != TaskNormalizer.NormalizeDueDate(request.DueDate))
         {
             return false;
         }
@@ -408,7 +409,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         }
 
         if (!string.IsNullOrWhiteSpace(request.DueDate) &&
-            NormalizeDueDate(parsed.DueDate) != NormalizeDueDate(request.DueDate))
+            TaskNormalizer.NormalizeDueDate(parsed.DueDate) != TaskNormalizer.NormalizeDueDate(request.DueDate))
         {
             return false;
         }
@@ -465,7 +466,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 // Старая схема без тегов: | Статус | Задача | Ответственный | Комментарий |
                 // -> | Статус | Задача | Срок(сегодня) | Ответственный | Теги(пусто) | Комментарий |
                 var cells = line.Split('|').ToList();
-                cells.Insert(3, $" {TodayString()} ");
+                cells.Insert(3, $" {TaskNormalizer.TodayString()} ");
                 cells.Insert(5, " ");
                 lines[i] = string.Join("|", cells);
                 migrated = true;
@@ -475,7 +476,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 // Старая схема без срока: | Статус | Задача | Ответственный | Теги | Комментарий |
                 // -> вставляем сегодняшний Срок после Задачи.
                 var cells = line.Split('|').ToList();
-                cells.Insert(3, $" {TodayString()} ");
+                cells.Insert(3, $" {TaskNormalizer.TodayString()} ");
                 lines[i] = string.Join("|", cells);
                 migrated = true;
             }
@@ -491,7 +492,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                     // -> переставляем Срок на 3-ю позицию.
                     var dueRaw = cells[5];
                     cells.RemoveAt(5);
-                    var normalized = NormalizeDueDate(dueRaw.Trim());
+                    var normalized = TaskNormalizer.NormalizeDueDate(dueRaw.Trim());
                     cells.Insert(3, $" {normalized} ");
                     // Заодно вычищаем мусор из Тегов (туда могла попасть дата).
                     cells[5] = $" {CleanTags(cells[5])} ";
@@ -504,13 +505,13 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                     // Заполняем пустой Срок сегодняшней датой, нормализуем формат.
                     if (string.IsNullOrWhiteSpace(third))
                     {
-                        cells[3] = $" {TodayString()} ";
+                        cells[3] = $" {TaskNormalizer.TodayString()} ";
                         lines[i] = string.Join("|", cells);
                         migrated = true;
                     }
                     else
                     {
-                        var normalized = NormalizeDueDate(third);
+                        var normalized = TaskNormalizer.NormalizeDueDate(third);
                         if (normalized != third)
                         {
                             cells[3] = $" {normalized} ";
@@ -587,7 +588,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     }
 
     private static string BuildRow(string status, string task, string? dueDate, string assignee, string tags, string? comment) =>
-        $"| {status} | {Escape(task)} | {Escape(NormalizeDueDate(dueDate))} | {Escape(assignee)} | {tags} | {Escape(comment)} |";
+        $"| {status} | {Escape(task)} | {Escape(TaskNormalizer.NormalizeDueDate(dueDate))} | {Escape(assignee)} | {tags} | {Escape(comment)} |";
 
     private static string Escape(string? value) =>
         (value ?? string.Empty)
@@ -603,39 +604,11 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     private static string Unescape(string? value) =>
         (value ?? string.Empty).Replace("\\n", "\n");
 
-    private static string TodayString() =>
-        DateTime.Today.AddHours(19).ToString("yyyy-MM-dd HH:mm");
+    private static string TodayString() => TaskNormalizer.TodayString();
 
-    public static string NormalizeTaskTitle(string? value)
-    {
-        var trimmed = (value ?? string.Empty).Trim();
-        if (trimmed.Length == 0)
-        {
-            return string.Empty;
-        }
+    [Obsolete("Используйте NikaAssistant.Domain.TaskNormalizer.NormalizeTaskTitle.")]
+    public static string NormalizeTaskTitle(string? value) => TaskNormalizer.NormalizeTaskTitle(value);
 
-        return char.ToUpper(trimmed[0], CultureInfo.GetCultureInfo("ru-RU")) + trimmed.Substring(1);
-    }
-
-    public static string NormalizeDueDate(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return TodayString();
-        }
-
-        var trimmed = value.Trim().Replace('T', ' ');
-        if (DateTime.TryParse(trimmed, out var dt))
-        {
-            // Если в строке нет времени (только дата) — ставим 19:00.
-            if (!trimmed.Contains(':'))
-            {
-                return dt.Date.AddHours(19).ToString("yyyy-MM-dd HH:mm");
-            }
-
-            return dt.ToString("yyyy-MM-dd HH:mm");
-        }
-
-        return trimmed;
-    }
+    [Obsolete("Используйте NikaAssistant.Domain.TaskNormalizer.NormalizeDueDate.")]
+    public static string NormalizeDueDate(string? value) => TaskNormalizer.NormalizeDueDate(value);
 }

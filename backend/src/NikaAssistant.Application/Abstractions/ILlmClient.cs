@@ -1,4 +1,4 @@
-namespace NikaAssistant.Infrastructure.LLM;
+namespace NikaAssistant.Application.Abstractions;
 
 public interface ILlmClient
 {

@@ -1,10 +1,11 @@
+using NikaAssistant.Application.Abstractions;
 using NikaAssistant.Application.Chat;
 using NikaAssistant.Application.CreateTask;
 using NikaAssistant.Application.DeleteTask;
 using NikaAssistant.Application.GetTask;
 using NikaAssistant.Application.UpdateTask;
 using NikaAssistant.Contracts;
-using NikaAssistant.Infrastructure.LLM;
+using NikaAssistant.Domain;
 using NikaAssistant.Infrastructure.LLM.OpenRouter;
 using NikaAssistant.Infrastructure.LocalStorage;
 using Serilog;
@@ -71,8 +72,8 @@ app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler, I
 {
     await handler.AddTaskAsync(request);
     var assignee = storage.ResolveAssignee(request.Assignee);
-    var dueDate = MarkdownOneTimeTaskStorage.NormalizeDueDate(request.DueDate);
-    var created = new OneTimeTask("[ ]", MarkdownOneTimeTaskStorage.NormalizeTaskTitle(request.Task), assignee, request.Comment ?? "", request.Tags ?? new List<string>(), dueDate);
+    var dueDate = TaskNormalizer.NormalizeDueDate(request.DueDate);
+    var created = new OneTimeTask("[ ]", TaskNormalizer.NormalizeTaskTitle(request.Task), assignee, request.Comment ?? "", request.Tags ?? new List<string>(), dueDate);
     return Results.Ok(created);
 });
 

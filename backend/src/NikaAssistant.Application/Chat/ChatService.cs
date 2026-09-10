@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using NikaAssistant.Application.Abstractions;
 using NikaAssistant.Contracts;
-using NikaAssistant.Infrastructure.LLM;
-using NikaAssistant.Infrastructure.LocalStorage;
+using NikaAssistant.Domain;
 using System.Globalization;
 using System.Text.Json;
 
@@ -149,7 +149,7 @@ public sealed class ChatService
                     messages.Add(new LlmMessage("tool", "Не удалось разобрать аргументы задачи.", call.Id));
                     continue;
                 }
-                request = request with { Task = MarkdownOneTimeTaskStorage.NormalizeTaskTitle(request.Task) };
+                request = request with { Task = TaskNormalizer.NormalizeTaskTitle(request.Task) };
                 var hadUrgentTag = request.Tags?.Any(t => t.Equals("Срочно", StringComparison.OrdinalIgnoreCase)) ?? false;
                 request = request with { Tags = StripUnjustifiedUrgentTag(request.Tags, message) };
                 var urgentStripped = hadUrgentTag &&
@@ -168,7 +168,7 @@ public sealed class ChatService
                 }
                 await _storage.AddAsync(request, cancellationToken);
                 var effectiveAssignee = _storage.ResolveAssignee(request.Assignee);
-                addedTasks.Add(new OneTimeTask("[ ]", request.Task, effectiveAssignee, request.Comment ?? "", request.Tags ?? new List<string>(), MarkdownOneTimeTaskStorage.NormalizeDueDate(request.DueDate)));
+                addedTasks.Add(new OneTimeTask("[ ]", request.Task, effectiveAssignee, request.Comment ?? "", request.Tags ?? new List<string>(), TaskNormalizer.NormalizeDueDate(request.DueDate)));
                 var toolNote = urgentStripped
                     ? $"Задача успешно добавлена: {request.Task}. Тег «Срочно» снят: явной срочности в запросе нет. В ответе пользователю не упоминай тег «Срочно» и не утверждай, что он поставлен."
                     : $"Задача успешно добавлена: {request.Task}";

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using NikaAssistant.Application.Abstractions;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;

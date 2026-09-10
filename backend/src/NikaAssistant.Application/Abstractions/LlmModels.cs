@@ -1,4 +1,4 @@
-namespace NikaAssistant.Infrastructure.LLM;
+namespace NikaAssistant.Application.Abstractions;
 
 public sealed record LlmMessage(
     string Role,
