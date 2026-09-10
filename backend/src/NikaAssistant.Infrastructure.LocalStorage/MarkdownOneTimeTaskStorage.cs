@@ -1,12 +1,17 @@
 using Microsoft.Extensions.Configuration;
 using NikaAssistant.Contracts;
+using System.Globalization;
 
 namespace NikaAssistant.Infrastructure.LocalStorage;
 
 public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 {
-    private const string DefaultFilePath = @"C:\Users\galki\Storage\Tasks\OneTime\one-time-tasks.md";
-    private const string DefaultArchivePath = @"C:\Users\galki\Storage\Tasks\Archive\archive-tasks.md";
+    private static readonly string DefaultFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "NikaAssistant", "Tasks", "OneTime", "one-time-tasks.md");
+    private static readonly string DefaultArchivePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "NikaAssistant", "Tasks", "Archive", "archive-tasks.md");
     private static readonly object Sync = new();
 
     // Актуальный порядок столбцов: Статус | Задача | Срок | Ответственный | Теги | Комментарий
@@ -19,9 +24,23 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
     public MarkdownOneTimeTaskStorage(IConfiguration configuration)
     {
-        _filePath = configuration["Storage:OneTimeTasksPath"] ?? DefaultFilePath;
-        _archivePath = configuration["Storage:ArchivePath"] ?? DefaultArchivePath;
+        _filePath = ResolvePath(configuration["Storage:OneTimeTasksPath"], DefaultFilePath);
+        _archivePath = ResolvePath(configuration["Storage:ArchivePath"], DefaultArchivePath);
         _defaultAssignee = configuration["Storage:DefaultAssignee"];
+    }
+
+    private static string ResolvePath(string? configuredPath, string fallbackPath)
+    {
+        var raw = string.IsNullOrWhiteSpace(configuredPath) ? fallbackPath : configuredPath;
+        // Раскрывает %USERPROFILE% (Windows) / $HOME (Unix), чтобы путь работал у любого пользователя.
+        raw = Environment.ExpandEnvironmentVariables(raw);
+        if (raw.StartsWith("~"))
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            raw = Path.Combine(home, raw.Substring(1).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        }
+
+        return raw;
     }
 
     public string ResolveAssignee(string? assignee) =>
@@ -29,6 +48,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
     public Task AddAsync(AddTaskRequest request, CancellationToken cancellationToken = default)
     {
+        request = request with { Task = NormalizeTaskTitle(request.Task) };
         var assignee = ResolveAssignee(request.Assignee);
         var tags = request.Tags == null ? "" : string.Join(", ", request.Tags.Select(Escape));
         var dueDate = NormalizeDueDate(request.DueDate);
@@ -578,6 +598,17 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
     private static string TodayString() =>
         DateTime.Today.AddHours(19).ToString("yyyy-MM-dd HH:mm");
+
+    public static string NormalizeTaskTitle(string? value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        return char.ToUpper(trimmed[0], CultureInfo.GetCultureInfo("ru-RU")) + trimmed.Substring(1);
+    }
 
     public static string NormalizeDueDate(string? value)
     {

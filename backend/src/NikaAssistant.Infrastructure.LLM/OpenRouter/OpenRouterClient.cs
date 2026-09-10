@@ -39,7 +39,8 @@ public sealed class OpenRouterClient : ILlmClient
     public async Task<LlmResponse> CompleteAsync(
         IReadOnlyList<LlmMessage> messages,
         IReadOnlyList<LlmTool>? tools = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? forceToolName = null)
     {
         var requestMessages = messages.Select(ToRequestMessage).ToArray();
         var toolDefinitions = tools?.Select(ToToolDefinition).ToArray();
@@ -53,7 +54,8 @@ public sealed class OpenRouterClient : ILlmClient
             Array.Copy(_fallbackModels, 0, models, 1, _fallbackModels.Length);
         }
 
-        var request = new ChatCompletionRequest(_model, requestMessages, toolDefinitions, models);
+        var request = new ChatCompletionRequest(_model, requestMessages, toolDefinitions, models,
+            forceToolName is null ? null : new ToolChoice("function", new ToolChoiceFunction(forceToolName)));
 
         var json = JsonSerializer.Serialize(request, JsonOptions);
 
@@ -88,7 +90,7 @@ public sealed class OpenRouterClient : ILlmClient
             .Select(t => new LlmToolCall(t.Id, t.Function.Name, t.Function.Arguments))
             .ToArray();
 
-        return new LlmResponse(message?.Content, toolCalls);
+        return new LlmResponse(message?.Content, toolCalls, IsError: false, Model: result?.Model);
     }
 
     private static RequestMessage ToRequestMessage(LlmMessage message)
@@ -110,7 +112,15 @@ public sealed class OpenRouterClient : ILlmClient
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("messages")] RequestMessage[] Messages,
         [property: JsonPropertyName("tools")] ToolDefinition[]? Tools = null,
-        [property: JsonPropertyName("models")] string[]? Models = null);
+        [property: JsonPropertyName("models")] string[]? Models = null,
+        [property: JsonPropertyName("tool_choice")] ToolChoice? ToolChoice = null);
+
+    private sealed record ToolChoice(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("function")] ToolChoiceFunction Function);
+
+    private sealed record ToolChoiceFunction(
+        [property: JsonPropertyName("name")] string Name);
 
     private sealed record RequestMessage(
         [property: JsonPropertyName("role")] string Role,
@@ -137,7 +147,8 @@ public sealed class OpenRouterClient : ILlmClient
         [property: JsonPropertyName("parameters")] JsonElement Parameters);
 
     private sealed record ChatCompletionResponse(
-        [property: JsonPropertyName("choices")] Choice[] Choices);
+        [property: JsonPropertyName("choices")] Choice[] Choices,
+        [property: JsonPropertyName("model")] string? Model = null);
 
     private sealed record Choice(
         [property: JsonPropertyName("message")] ResponseMessage Message);

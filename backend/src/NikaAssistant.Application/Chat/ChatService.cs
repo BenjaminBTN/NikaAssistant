@@ -13,7 +13,7 @@ public sealed class ChatService
     private static readonly JsonSerializerOptions JsonOptions = JsonSerializerOptions.Web;
 
     private const string SystemPromptTemplate =
-        "Ты — помощница Ника. Общайся на русском. Сегодня: {0}."
+        "Ты — помощница по имени Ника. Общайся на русском. Сегодня: {0}."
         + " Относительные даты («сегодня», «завтра», «на этой неделе» и т.п.) отсчитывай строго от этой даты,"
         + " а не из своих знаний о календаре. Дату dueDate всегда вычисляй от сегодняшней даты и указывай в формате yyyy-MM-dd HH:mm."
         + " Инструмент add_task вызывай СТРОГО только когда пользователь явно просит добавить, создать или записать задачу,"
@@ -21,21 +21,41 @@ public sealed class ChatService
         + " Во всех остальных случаях (вопросы, болтовня, уточнения) просто отвечай текстом и никаких задач не создавай."
         + " Каждое новое сообщение пользователя с просьбой добавить задачу — это НОВАЯ задача: вызывай add_task даже если текст похож на уже добавленную ранее."
         + " Ранее добавленные задачи не считай поводом пропускать вызов."
-        + " Запрет на дубли действует только внутри одного твоего ответа: на одну задачу в одном ответе вызывай add_task РОВНО ОДИН раз.";
+        + " Запрет на дубли действует только внутри одного твоего ответа: на одну задачу в одном ответе вызывай add_task РОВНО ОДИН раз."
+        + " Название задачи (поле task) всегда начинай с заглавной буквы."
+        + " Теги ставь только в самых очевидных случаях: «Срочно» — только если пользователь прямо пишет про срочность"
+        + " («срочно», «немедленно», «горит» и т.п.); «Ожидание» и «Зависло» — только при явном указании."
+        + " Если уверенности нет — вообще не передавай поле tags.";
 
     private const string HistoryKey = "chat_history";
     private const int MaxHistoryMessages = 40;
+
+    // Маркеры явной срочности в сообщении пользователя. «Срочно» от модели засчитывается
+    // только если в запросе есть один из них, — иначе тег снимается кодом.
+    private static readonly string[] UrgencyMarkers =
+    [
+        "срочн", "немедленн", "неотложн", "asap", "горит", "горят",
+        "прямо сейчас", "как можно скорее", "кровь из носу", "сегодня же",
+    ];
+    // Маркеры явной просьбы добавить задачу. Проверка грубая (подстрока, без учёта регистра):
+    // ретрай с принудительным tool_choice срабатывает только если первый ответ модели
+    // пришёл вообще без tool calls, так что ложное срабатывание максимум стоит одного лишнего запроса.
+    private static readonly string[] TaskIntentMarkers =
+    [
+        "добав", "созда", "запиш", "поставь задачу", "новая задача", "напомни",
+        "еще такую", "ещё такую", "такую же", "и вторую", "внеси", "занеси", "зафиксируй",
+    ];
 
     private const string AddTaskSchemaTemplate =
         """
         {
           "type": "object",
           "properties": {
-            "task": { "type": "string", "description": "Текст задачи" },
+            "task": { "type": "string", "description": "Текст задачи. Первое слово всегда с заглавной буквы" },
             "assignee": { "type": "string", "description": "Ответственный за задачу" },
             "comment": { "type": "string", "description": "Комментарий к задаче" },
             "dueDate": { "type": "string", "description": "Срок исполнения в формате yyyy-MM-dd HH:mm. Сегодня {TODAY}. Если пользователь не указал срок или время — не передавай это поле (по умолчанию будет установлено сегодня 19:00). Если указана только дата без времени — передавай дату с временем 19:00. Если пользователь сказал «сегодня» — передавай {TODAY} 19:00, если «завтра» — завтрашнюю дату 19:00" },
-            "tags": { "type": "array", "items": { "type": "string", "enum": ["Срочно", "Зависло", "Ожидание"] }, "description": "Теги задачи" }
+            "tags": { "type": "array", "items": { "type": "string", "enum": ["Срочно", "Зависло", "Ожидание"] }, "description": "Теги задачи. Передавай ТОЛЬКО при явном указании: «Срочно» — если пользователь прямо сказал про срочность, «Ожидание»/«Зависло» — если прямо сказано. Во всех остальных случаях не передавай это поле" }
           },
           "required": ["task"]
         }
@@ -84,6 +104,36 @@ public sealed class ChatService
                 Array.Empty<OneTimeTask>());
         }
         messages.Add(ToAssistantMessage(response));
+        _logger.LogInformation("Chat LLM answer by {Model}, tool calls: {ToolCallCount}: {Content}",
+            response.Model ?? "unknown", response.ToolCalls.Count, Truncate(response.Content, 1000));
+
+        if (response.ToolCalls.Count == 0 && LooksLikeAddTaskRequest(message))
+        {
+            // Модель иногда отвечает «Добавил задачу» текстом, не вызывая add_task.
+            // Повторяем тот же запрос с принудительным tool_choice — один раз.
+            _logger.LogInformation("Chat no tool calls for add-task-like message, retrying with forced tool_choice.");
+            try
+            {
+                var retry = await _llm.CompleteAsync(messages, new[] { addTaskTool }, cancellationToken, "add_task");
+                if (retry.IsError)
+                {
+                    _logger.LogWarning("Chat forced retry provider error: {Detail}", retry.Content);
+                }
+                else
+                {
+                    _logger.LogInformation("Chat forced retry answer by {Model}, tool calls: {ToolCallCount}: {Content}",
+                        retry.Model ?? "unknown", retry.ToolCalls.Count, Truncate(retry.Content, 1000));
+                    // В историю пишем только итоговый обмен, чтобы не плодить мусор из первой попытки.
+                    messages.RemoveAt(messages.Count - 1);
+                    messages.Add(ToAssistantMessage(retry));
+                    response = retry;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Chat forced retry failed, using original answer.");
+            }
+        }
 
         var addedTasks = new List<OneTimeTask>();
         var seenTaskKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -99,6 +149,15 @@ public sealed class ChatService
                     messages.Add(new LlmMessage("tool", "Не удалось разобрать аргументы задачи.", call.Id));
                     continue;
                 }
+                request = request with { Task = MarkdownOneTimeTaskStorage.NormalizeTaskTitle(request.Task) };
+                var hadUrgentTag = request.Tags?.Any(t => t.Equals("Срочно", StringComparison.OrdinalIgnoreCase)) ?? false;
+                request = request with { Tags = StripUnjustifiedUrgentTag(request.Tags, message) };
+                var urgentStripped = hadUrgentTag &&
+                    !(request.Tags?.Any(t => t.Equals("Срочно", StringComparison.OrdinalIgnoreCase)) ?? false);
+                if (urgentStripped)
+                {
+                    _logger.LogInformation("Chat stripped unjustified 'Срочно' tag for task: {Task}", request.Task);
+                }
                 if (!seenTaskKeys.Add(request.Task.Trim()))
                 {
                     // LLM иногда присылает несколько одинаковых вызовов в одном ответе —
@@ -110,7 +169,10 @@ public sealed class ChatService
                 await _storage.AddAsync(request, cancellationToken);
                 var effectiveAssignee = _storage.ResolveAssignee(request.Assignee);
                 addedTasks.Add(new OneTimeTask("[ ]", request.Task, effectiveAssignee, request.Comment ?? "", request.Tags ?? new List<string>(), MarkdownOneTimeTaskStorage.NormalizeDueDate(request.DueDate)));
-                messages.Add(new LlmMessage("tool", $"Задача успешно добавлена: {request.Task}", call.Id));
+                var toolNote = urgentStripped
+                    ? $"Задача успешно добавлена: {request.Task}. Тег «Срочно» снят: явной срочности в запросе нет. В ответе пользователю не упоминай тег «Срочно» и не утверждай, что он поставлен."
+                    : $"Задача успешно добавлена: {request.Task}";
+                messages.Add(new LlmMessage("tool", toolNote, call.Id));
             }
         }
 
@@ -129,6 +191,8 @@ public sealed class ChatService
                 return new ChatResult(note, addedTasks);
             }
             messages.Add(new LlmMessage("assistant", final.Content ?? string.Empty));
+            _logger.LogInformation("Chat final answer by {Model}: {Content}",
+                final.Model ?? "unknown", Truncate(final.Content, 1000));
             SaveHistory(messages);
             return new ChatResult(final.Content ?? string.Empty, addedTasks);
         }
@@ -177,6 +241,37 @@ public sealed class ChatService
 
         _session.SetString(HistoryKey, JsonSerializer.Serialize(conversational, JsonOptions));
     }
+
+    private static List<string>? StripUnjustifiedUrgentTag(List<string>? tags, string userMessage)
+    {
+        if (tags is null || tags.Count == 0)
+        {
+            return tags;
+        }
+
+        if (!tags.Any(t => t.Equals("Срочно", StringComparison.OrdinalIgnoreCase)))
+        {
+            return tags;
+        }
+
+        if (UrgencyMarkers.Any(m => userMessage.Contains(m, StringComparison.OrdinalIgnoreCase)))
+        {
+            return tags;
+        }
+
+        return tags.Where(t => !t.Equals("Срочно", StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private static bool LooksLikeAddTaskRequest(string message)
+    {
+        var lower = message.ToLowerInvariant();
+        return TaskIntentMarkers.Any(m => lower.Contains(m, StringComparison.Ordinal));
+    }
+
+    private static string Truncate(string? value, int maxLength) =>
+        string.IsNullOrEmpty(value) ? "(пусто)"
+        : value.Length <= maxLength ? value
+        : value.Substring(0, maxLength) + "…";
 
     private static LlmMessage ToAssistantMessage(LlmResponse response)
     {

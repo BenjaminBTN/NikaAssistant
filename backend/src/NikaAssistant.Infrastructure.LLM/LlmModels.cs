@@ -8,6 +8,6 @@ public sealed record LlmMessage(
 
 public sealed record LlmToolCall(string Id, string Name, string ArgumentsJson);
 
-public sealed record LlmResponse(string? Content, IReadOnlyList<LlmToolCall> ToolCalls, bool IsError = false);
+public sealed record LlmResponse(string? Content, IReadOnlyList<LlmToolCall> ToolCalls, bool IsError = false, string? Model = null);
 
 public sealed record LlmTool(string Name, string Description, string ParametersJson);

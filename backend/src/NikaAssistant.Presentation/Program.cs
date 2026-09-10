@@ -7,8 +7,25 @@ using NikaAssistant.Contracts;
 using NikaAssistant.Infrastructure.LLM;
 using NikaAssistant.Infrastructure.LLM.OpenRouter;
 using NikaAssistant.Infrastructure.LocalStorage;
+using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var logDirectory = ResolveLogDirectory(builder.Configuration);
+var retainedDays = builder.Configuration.GetValue<int?>("Logging:File:RetainedDays") is { } days and > 0 ? days : 30;
+Directory.CreateDirectory(logDirectory);
+
+builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration
+    .MinimumLevel.Is(ParseLevel(context.Configuration["Logging:LogLevel:Default"], LogEventLevel.Information))
+    .MinimumLevel.Override("Microsoft.AspNetCore", ParseLevel(context.Configuration["Logging:LogLevel:Microsoft.AspNetCore"], LogEventLevel.Warning))
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        Path.Combine(logDirectory, "nika-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: retainedDays,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}"));
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient<OpenRouterClient>()
@@ -34,6 +51,7 @@ builder.Services.AddScoped<ChatService>();
 
 var app = builder.Build();
 
+app.UseSerilogRequestLogging();
 app.UseSession();
 
 if(app.Environment.IsDevelopment())
@@ -54,7 +72,7 @@ app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler, I
     await handler.AddTaskAsync(request);
     var assignee = storage.ResolveAssignee(request.Assignee);
     var dueDate = MarkdownOneTimeTaskStorage.NormalizeDueDate(request.DueDate);
-    var created = new OneTimeTask("[ ]", request.Task, assignee, request.Comment ?? "", request.Tags ?? new List<string>(), dueDate);
+    var created = new OneTimeTask("[ ]", MarkdownOneTimeTaskStorage.NormalizeTaskTitle(request.Task), assignee, request.Comment ?? "", request.Tags ?? new List<string>(), dueDate);
     return Results.Ok(created);
 });
 
@@ -97,3 +115,27 @@ app.MapPost("/Chat", async (ChatRequest request, ChatService chatService) =>
 });
 
 app.Run();
+
+static string ResolveLogDirectory(IConfiguration configuration)
+{
+    var raw = configuration["Logging:File:Directory"];
+    if (string.IsNullOrWhiteSpace(raw))
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "NikaAssistant", "Logs");
+    }
+
+    // Раскрывает %USERPROFILE% (Windows) / $HOME (Unix), чтобы путь работал у любого пользователя.
+    raw = Environment.ExpandEnvironmentVariables(raw);
+    if (raw.StartsWith("~"))
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        raw = Path.Combine(home, raw.Substring(1).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    }
+
+    return raw;
+}
+
+static LogEventLevel ParseLevel(string? value, LogEventLevel fallback) =>
+    Enum.TryParse<LogEventLevel>(value, ignoreCase: true, out var level) ? level : fallback;
