@@ -5,11 +5,11 @@ using NikaAssistant.Domain;
 
 namespace NikaAssistant.Infrastructure.LocalStorage;
 
-public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
+public sealed class MarkdownMonthlyTaskStorage : IMonthlyTaskStorage
 {
     private static readonly string DefaultFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "NikaAssistant", "Tasks", "OneTime", "one-time-tasks.md");
+        "NikaAssistant", "Tasks", "Monthly", "monthly-tasks.md");
     private static readonly string DefaultArchivePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         "NikaAssistant", "Tasks", "Archive", "archive-tasks.md");
@@ -23,9 +23,9 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     private readonly string _archivePath;
     private readonly string? _defaultAssignee;
 
-    public MarkdownOneTimeTaskStorage(IConfiguration configuration)
+    public MarkdownMonthlyTaskStorage(IConfiguration configuration)
     {
-        _filePath = ResolvePath(configuration["Storage:OneTimeTasksPath"], DefaultFilePath);
+        _filePath = ResolvePath(configuration["Storage:MonthlyTasksPath"], DefaultFilePath);
         _archivePath = ResolvePath(configuration["Storage:ArchivePath"], DefaultArchivePath);
         _defaultAssignee = configuration["Storage:DefaultAssignee"];
     }
@@ -33,7 +33,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     private static string ResolvePath(string? configuredPath, string fallbackPath)
     {
         var raw = string.IsNullOrWhiteSpace(configuredPath) ? fallbackPath : configuredPath;
-        // Раскрывает %USERPROFILE% (Windows) / $HOME (Unix), чтобы путь работал у любого пользователя.
         raw = Environment.ExpandEnvironmentVariables(raw);
         if (raw.StartsWith("~"))
         {
@@ -49,9 +48,13 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
     public Task AddAsync(AddTaskRequest request, CancellationToken cancellationToken = default)
     {
-        request = request with { Task = TaskNormalizer.NormalizeTaskTitle(request.Task) };
+        request = request with
+        {
+            Task = TaskNormalizer.NormalizeTaskTitle(request.Task),
+            Tags = MonthlyTaskRules.EnsureMonthlyTag(request.Tags),
+        };
         var assignee = ResolveAssignee(request.Assignee);
-        var tags = request.Tags == null ? "" : string.Join(", ", request.Tags.Select(Escape));
+        var tags = string.Join(", ", request.Tags!.Select(Escape));
         var dueDate = TaskNormalizer.NormalizeDueDate(request.DueDate);
         var row = BuildRow("[ ]", request.Task, dueDate, assignee, tags, request.Comment);
 
@@ -68,7 +71,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             if (!File.Exists(_filePath))
             {
                 var header =
-                    "# Разовые задачи" + Environment.NewLine + Environment.NewLine +
+                    "# Ежемесячные задачи" + Environment.NewLine + Environment.NewLine +
                     HeaderRow + Environment.NewLine +
                     SeparatorRow + Environment.NewLine;
 
@@ -186,10 +189,17 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var currentTags = string.IsNullOrWhiteSpace(parsed.Tags)
                 ? new List<string>()
                 : parsed.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-            // Тег "Ежемесячно" недоступен для редактирования: сохраняем, если был, и режем, если пытаются добавить.
-            var requestedTags = request.NewTags == null ? currentTags : request.NewTags;
-            var effectiveTags = MonthlyTaskRules.ApplyEditTagPolicy(currentTags, requestedTags);
-            var newTags = string.Join(", ", effectiveTags.Select(Escape));
+            var requestedTags = request.NewTags == null
+                ? currentTags
+                : request.NewTags;
+            // Тег "Ежемесячно" нельзя снять через редактирование.
+            var newTags = string.Join(", ",
+                MonthlyTaskRules.ApplyEditTagPolicy(currentTags, requestedTags).Select(Escape));
+            if (!MonthlyTaskRules.HasMonthlyTag(newTags.Split(',', StringSplitOptions.TrimEntries)))
+            {
+                newTags = string.Join(", ", MonthlyTaskRules.EnsureMonthlyTag(
+                    newTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).Select(Escape));
+            }
 
             var newTask = request.NewTask ?? parsed.Task;
             var newAssignee = request.NewAssignee ?? parsed.Assignee;
@@ -282,6 +292,12 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 continue;
             }
 
+            // Ежемесячные задачи всегда с тегом "Ежемесячно".
+            if (!MonthlyTaskRules.HasMonthlyTag(tags))
+            {
+                tags = MonthlyTaskRules.EnsureMonthlyTag(tags);
+            }
+
             tasks.Add(new OneTimeTask(status, Unescape(task), Unescape(assignee), Unescape(comment), tags, dueDate));
         }
 
@@ -296,8 +312,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         }
 
         var cells = line.Split('|');
-        // Актуальные 6 колонок: | Статус | Задача | Срок | Ответственный | Теги | Комментарий |
-        // Плюс поддержка предыдущего порядка: | Статус | Задача | Ответственный | Теги | Срок | Комментарий |
         if (cells.Length >= 8)
         {
             var third = cells[3].Trim();
@@ -322,7 +336,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 Comment: string.Join("|", cells.Skip(6).Take(cells.Length - 7)).Trim());
         }
 
-        // Legacy 5 columns: | Статус | Задача | Ответственный | Теги | Комментарий |
         if (cells.Length >= 7)
         {
             return (
@@ -334,7 +347,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                 Comment: string.Join("|", cells.Skip(5).Take(cells.Length - 6)).Trim());
         }
 
-        // Legacy 4 columns (no tags)
         if (cells.Length >= 6)
         {
             return (
@@ -349,8 +361,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         return null;
     }
 
-    // Убирает из строки тегов фрагменты, похожие на дату (мусор от старой версии,
-    // которая писала срок в колонку тегов, когда тегов не было).
     private static string CleanTags(string? tags)
     {
         if (string.IsNullOrWhiteSpace(tags))
@@ -390,7 +400,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             return false;
         }
 
-        // DueDate проверяем только если он передан (обратная совместимость).
         if (!string.IsNullOrWhiteSpace(request.DueDate) &&
             TaskNormalizer.NormalizeDueDate(parsed.DueDate) != TaskNormalizer.NormalizeDueDate(request.DueDate))
         {
@@ -467,8 +476,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var cols = CountDataColumns(line);
             if (cols == 4)
             {
-                // Старая схема без тегов: | Статус | Задача | Ответственный | Комментарий |
-                // -> | Статус | Задача | Срок(сегодня) | Ответственный | Теги(пусто) | Комментарий |
                 var cells = line.Split('|').ToList();
                 cells.Insert(3, $" {TaskNormalizer.TodayString()} ");
                 cells.Insert(5, " ");
@@ -477,8 +484,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             }
             else if (cols == 5)
             {
-                // Старая схема без срока: | Статус | Задача | Ответственный | Теги | Комментарий |
-                // -> вставляем сегодняшний Срок после Задачи.
                 var cells = line.Split('|').ToList();
                 cells.Insert(3, $" {TaskNormalizer.TodayString()} ");
                 lines[i] = string.Join("|", cells);
@@ -492,21 +497,16 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
 
                 if (!LooksLikeDueDate(third) && (LooksLikeDueDate(fifth) || string.IsNullOrWhiteSpace(third)))
                 {
-                    // Предыдущий порядок: | Статус | Задача | Ответственный | Теги | Срок | Комментарий |
-                    // -> переставляем Срок на 3-ю позицию.
                     var dueRaw = cells[5];
                     cells.RemoveAt(5);
                     var normalized = TaskNormalizer.NormalizeDueDate(dueRaw.Trim());
                     cells.Insert(3, $" {normalized} ");
-                    // Заодно вычищаем мусор из Тегов (туда могла попасть дата).
                     cells[5] = $" {CleanTags(cells[5])} ";
                     lines[i] = string.Join("|", cells);
                     migrated = true;
                 }
                 else
                 {
-                    // Уже новый порядок: | Статус | Задача | Срок | Ответственный | Теги | Комментарий |
-                    // Заполняем пустой Срок сегодняшней датой, нормализуем формат.
                     if (string.IsNullOrWhiteSpace(third))
                     {
                         cells[3] = $" {TaskNormalizer.TodayString()} ";
@@ -524,8 +524,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
                         }
                     }
 
-                    // Вычищаем мусор из Тегов: туда могла попасть дата
-                    // (старая версия писала срок в колонку тегов, когда тегов не было).
                     var cleanedTags = CleanTags(cells[5]);
                     if (cells[5].Trim() != cleanedTags)
                     {
@@ -568,8 +566,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         }
         else
         {
-            // Архив уже в новом порядке (строка приходит из мигрированного файла),
-            // но старый архивный файл мог остаться в предыдущем порядке — нормализуем.
             MigrateFile(_archivePath);
         }
 
@@ -602,17 +598,6 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             .Replace("|", "\\|")
             .Trim();
 
-    // Обратное преобразование при чтении: последовательность "\n" в .md — это перенос строки.
-    // Строка таблицы обязана оставаться однострочной, поэтому реальные переводы строк
-    // хранятся в файле в виде escape-последовательности.
     private static string Unescape(string? value) =>
         (value ?? string.Empty).Replace("\\n", "\n");
-
-    private static string TodayString() => TaskNormalizer.TodayString();
-
-    [Obsolete("Используйте NikaAssistant.Domain.TaskNormalizer.NormalizeTaskTitle.")]
-    public static string NormalizeTaskTitle(string? value) => TaskNormalizer.NormalizeTaskTitle(value);
-
-    [Obsolete("Используйте NikaAssistant.Domain.TaskNormalizer.NormalizeDueDate.")]
-    public static string NormalizeDueDate(string? value) => TaskNormalizer.NormalizeDueDate(value);
 }
