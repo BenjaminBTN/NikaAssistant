@@ -26,6 +26,27 @@
     .task-row-new {
       animation: taskRowFlash 1.5s ease-out;
     }
+    .task-row-moved {
+      animation: taskRowFlash 1.5s ease-out;
+    }
+    #tasks-body tr {
+      transition: opacity 0.18s ease;
+    }
+    #tasks-body tr.task-row-fading {
+      opacity: 0;
+    }
+    .task-move-ghost {
+      margin: 0;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      border-collapse: collapse;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.18);
+      overflow: hidden;
+      pointer-events: none;
+      transition: transform 0.45s cubic-bezier(0.22, 0.8, 0.3, 1), opacity 0.45s ease;
+      will-change: transform;
+    }
     .comment-view {
       display: -webkit-box;
       -webkit-line-clamp: 4;
@@ -74,6 +95,32 @@
         min-width: 0 !important;
         width: 100% !important;
       }
+      /* Гост анимации переезда вне #tasks-table: дублируем мобильную раскладку,
+         иначе ячейки схлопываются и текст перестраивается в одну строку. */
+      .task-move-ghost,
+      .task-move-ghost tbody,
+      .task-move-ghost tr,
+      .task-move-ghost td {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+      }
+      .task-move-ghost tr:not(.due-group-header) {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 0.5rem 0;
+      }
+      .task-move-ghost td {
+        border: 0 !important;
+        padding: 0.25rem 1rem !important;
+        text-align: left !important;
+        white-space: normal !important;
+      }
+      .task-move-ghost td > div,
+      .task-move-ghost td > textarea,
+      .task-move-ghost td > input {
+        max-width: 100%;
+        white-space: normal !important;
+      }
     }
   </style>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -100,25 +147,25 @@
 
   <main class="mx-auto w-full max-w-none min-w-0 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
     <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <div id="card-urgent" class="cursor-pointer rounded-lg border border-red-200 bg-red-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+      <div id="card-urgent" class="cursor-pointer rounded-lg border border-red-200 bg-red-50 px-4 py-3 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Срочно</div>
-        <div id="count-urgent" class="mt-2 text-4xl font-bold text-slate-950">0</div>
-        <div class="mt-2 text-sm text-slate-600">Требуют действия сейчас</div>
+        <div id="count-urgent" class="mt-1 text-2xl font-bold text-slate-950">0</div>
+        <div class="mt-1 text-xs text-slate-600">Требуют действия сейчас</div>
       </div>
-      <div id="card-stuck" class="cursor-pointer rounded-lg border border-orange-200 bg-orange-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+      <div id="card-stuck" class="cursor-pointer rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Зависло</div>
-        <div id="count-stuck" class="mt-2 text-4xl font-bold text-slate-950">0</div>
-        <div class="mt-2 text-sm text-slate-600">Нужно подтолкнуть участника</div>
+        <div id="count-stuck" class="mt-1 text-2xl font-bold text-slate-950">0</div>
+        <div class="mt-1 text-xs text-slate-600">Нужно подтолкнуть участника</div>
       </div>
-      <div id="card-waiting" class="cursor-pointer rounded-lg border border-blue-200 bg-blue-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+      <div id="card-waiting" class="cursor-pointer rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Ожидание ответа</div>
-        <div id="count-waiting" class="mt-2 text-4xl font-bold text-slate-950">0</div>
-        <div class="mt-2 text-sm text-slate-600">Письма, подрядчики, HR</div>
+        <div id="count-waiting" class="mt-1 text-2xl font-bold text-slate-950">0</div>
+        <div class="mt-1 text-xs text-slate-600">Письма, подрядчики, HR</div>
       </div>
-      <div id="card-control" class="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+      <div id="card-control" class="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">На контроле</div>
-        <div id="count-control" class="mt-2 text-4xl font-bold text-slate-950">0</div>
-        <div class="mt-2 text-sm text-slate-600">Проверить статус у ответственных</div>
+        <div id="count-control" class="mt-1 text-2xl font-bold text-slate-950">0</div>
+        <div class="mt-1 text-xs text-slate-600">Проверить статус у ответственных</div>
       </div>
     </section>
 
@@ -444,6 +491,12 @@
       var allTasks = [];
       var defaultAssignee = "";
       var currentFilter = null;
+      var taskUidCounter = 0;
+
+      function ensureTaskUid(t) {
+        if (!t._uid) t._uid = ++taskUidCounter;
+        return t._uid;
+      }
 
       function isDone(t) {
         return (t.status || "").toLowerCase().indexOf("x") !== -1;
@@ -629,6 +682,8 @@
         });
 
         function sortByTime(a, b) {
+          var da = isDone(a) ? 1 : 0, db = isDone(b) ? 1 : 0;
+          if (da !== db) return da - db;
           var pa = parseDue(getDueDate(a)), pb = parseDue(getDueDate(b));
           var ta = pa ? pa.date.getTime() : 0, tb = pb ? pb.date.getTime() : 0;
           return ta - tb;
@@ -665,6 +720,7 @@
         var done = (t.status || "").indexOf("x") !== -1;
         var tr = document.createElement("tr");
         tr.className = "border-b border-slate-200";
+        tr.setAttribute("data-uid", ensureTaskUid(t));
         if (bucket) tr.setAttribute("data-group-row", bucket);
 
         var statusCell = document.createElement("td");
@@ -944,6 +1000,102 @@
         }
       }
 
+      function flashMovedRow(t) {
+        var row = document.querySelector('#tasks-body tr[data-uid="' + t._uid + '"]');
+        if (!row) return;
+        row.classList.add("task-row-moved");
+        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        setTimeout(function () { row.classList.remove("task-row-moved"); }, 1500);
+      }
+
+      function animateTaskMove(oldTr, t) {
+        var oldRect = oldTr && oldTr.isConnected ? oldTr.getBoundingClientRect() : null;
+        // Замеряем раскладку ДО перерисовки: без контекста колонок thead
+        // клон схлопывается и многострочный текст перестраивается в одну строку.
+        var frozen = null;
+        if (oldRect && oldTr) {
+          try {
+            var srcTable = document.getElementById("tasks-table");
+            var tableCs = srcTable ? window.getComputedStyle(srcTable) : null;
+            var trCs = window.getComputedStyle(oldTr);
+            var srcCells = oldTr.children;
+            var cells = [];
+            for (var i = 0; i < srcCells.length; i++) {
+              var c = srcCells[i];
+              var cs = window.getComputedStyle(c);
+              var r = c.getBoundingClientRect();
+              cells.push({ display: cs.display, width: r.width });
+            }
+            frozen = {
+              trDisplay: trCs.display,
+              cells: cells,
+              tableLayout: tableCs ? tableCs.tableLayout : "fixed",
+              borderCollapse: tableCs ? tableCs.borderCollapse : "collapse"
+            };
+          } catch (e) { frozen = null; }
+        }
+        renderTasks();
+        if (!oldRect) {
+          flashMovedRow(t);
+          return;
+        }
+        var newRow = document.querySelector('#tasks-body tr[data-uid="' + t._uid + '"]');
+        if (!newRow) return;
+        var newRect = newRow.getBoundingClientRect();
+        var dx = newRect.left - oldRect.left;
+        var dy = newRect.top - oldRect.top;
+        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
+          flashMovedRow(t);
+          return;
+        }
+
+        var ghost = document.createElement("table");
+        ghost.className = "task-move-ghost";
+        ghost.style.position = "fixed";
+        ghost.style.left = oldRect.left + "px";
+        ghost.style.top = oldRect.top + "px";
+        ghost.style.width = oldRect.width + "px";
+        ghost.style.height = oldRect.height + "px";
+        ghost.style.zIndex = "60";
+        if (frozen) {
+          ghost.style.tableLayout = "fixed";
+          ghost.style.borderCollapse = frozen.borderCollapse || "collapse";
+        }
+        var ghostBody = document.createElement("tbody");
+        var clone = oldTr.cloneNode(true);
+        clone.removeAttribute("data-uid");
+        if (frozen) {
+          clone.style.display = frozen.trDisplay;
+          clone.style.width = oldRect.width + "px";
+          var cloneCells = clone.children;
+          for (var j = 0; j < cloneCells.length && j < frozen.cells.length; j++) {
+            cloneCells[j].style.display = frozen.cells[j].display;
+            cloneCells[j].style.width = frozen.cells[j].width + "px";
+            cloneCells[j].style.maxWidth = frozen.cells[j].width + "px";
+            cloneCells[j].style.boxSizing = "border-box";
+          }
+        }
+        ghostBody.appendChild(clone);
+        ghost.appendChild(ghostBody);
+        document.body.appendChild(ghost);
+
+        newRow.style.visibility = "hidden";
+        // Форсируем layout, чтобы transition сработал от стартовой позиции.
+        void ghost.offsetWidth;
+        ghost.style.transform = "translate(" + dx + "px," + dy + "px)";
+
+        var finished = false;
+        function cleanup() {
+          if (finished) return;
+          finished = true;
+          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+          newRow.style.visibility = "";
+          flashMovedRow(t);
+        }
+        ghost.addEventListener("transitionend", cleanup);
+        setTimeout(cleanup, 550);
+      }
+
       async function toggleStatus(t, checkBtn, tr) {
         var wasDone = (t.status || "").indexOf("x") !== -1;
         var newStatus = wasDone ? "[ ]" : "[x]";
@@ -971,13 +1123,25 @@
           } else {
             renderStatus(checkBtn, taskTitleEl, wasDone);
             alert("Не удалось обновить статус");
+            updateSummary();
+            renderTasks();
+            return;
           }
         } catch (err) {
           renderStatus(checkBtn, taskTitleEl, wasDone);
           alert("Ошибка при обновлении статуса");
+          updateSummary();
+          renderTasks();
+          return;
         }
+        ensureTaskUid(t);
         updateSummary();
-        renderTasks();
+        if (tr && tr.isConnected) {
+          tr.classList.add("task-row-fading");
+          setTimeout(function () { animateTaskMove(tr, t); }, 160);
+        } else {
+          animateTaskMove(tr, t);
+        }
       }
 
       var tagPopup = null;
@@ -1468,7 +1632,7 @@
       autoGrowChat();
 
       input.addEventListener("keydown", function (e) {
-        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           form.requestSubmit();
         }
