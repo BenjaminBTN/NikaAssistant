@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using NikaAssistant.Application.Abstractions;
 using NikaAssistant.Application.Chat;
 using NikaAssistant.Application.CreateTask;
@@ -12,6 +13,10 @@ using Serilog;
 using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Локальный секретный файл рядом с exe: не коммитится, приоритет выше appsettings.json.
+// Сюда можно положить OpenRouter:ApiKey и переопределить Model/FallbackModels.
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 var logDirectory = ResolveLogDirectory(builder.Configuration);
 var retainedDays = builder.Configuration.GetValue<int?>("Logging:File:RetainedDays") is { } days and > 0 ? days : 30;
@@ -29,6 +34,7 @@ builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}"));
 
 builder.Services.AddOpenApi();
+builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
 builder.Services.AddHttpClient<OpenRouterClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
@@ -85,6 +91,22 @@ app.MapGet("/GetTasks", async (GetTaskHandler handler) =>
 
 app.MapGet("/Config", () =>
     Results.Ok(new { defaultAssignee = builder.Configuration["Storage:DefaultAssignee"] ?? "" }));
+
+app.MapGet("/LlmConfig", (IOptionsMonitor<OpenRouterOptions> monitor) =>
+{
+    var snapshot = monitor.CurrentValue;
+    var hasApiKey = !string.IsNullOrWhiteSpace(snapshot.ApiKey)
+        || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"))
+        || !string.IsNullOrWhiteSpace(builder.Configuration["OpenRouter:ApiKey"]);
+    return Results.Ok(new
+    {
+        model = snapshot.Model,
+        fallbackModels = snapshot.FallbackModels ?? [],
+        hasApiKey,
+        referer = snapshot.Referer,
+        title = snapshot.Title
+    });
+});
 
 app.MapPost("/DeleteTask", async (DeleteTaskRequest request, DeleteTaskHandler handler) =>
 {

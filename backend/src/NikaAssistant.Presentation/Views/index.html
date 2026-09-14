@@ -93,7 +93,7 @@
           <div class="text-xs text-slate-500">Сегодня</div>
           <div id="today-date" class="text-sm font-semibold">—</div>
         </div>
-        <button id="add-task-btn" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Добавить задачу</button>
+        <button id="add-task-btn" class="rounded-lg bg-gradient-to-r from-[#C061CB] to-[#7B2FF7] px-4 py-2 text-sm font-semibold text-white hover:from-[#B04FC0] hover:to-[#6A28E0]">Добавить задачу</button>
       </div>
     </div>
   </header>
@@ -163,7 +163,7 @@
             <textarea id="chat-input" rows="1" required placeholder="Введите сообщение…"
               class="max-h-none min-w-0 flex-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
             <button type="submit" id="chat-send"
-              class="shrink-0 rounded-lg bg-slate-950 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">Отправить</button>
+              class="shrink-0 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">Отправить</button>
           </form>
         </div>
 
@@ -279,6 +279,12 @@
 
       openBtn.addEventListener("click", showModal);
       cancelBtn.addEventListener("click", hideModal);
+      modal.addEventListener("click", function (e) {
+        if (e.target === modal) hideModal();
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && modal.style.display === "flex") hideModal();
+      });
 
       // Подсказка DefaultAssignee в поле "Ответственный" (как в чате: пустое = DefaultAssignee).
       try {
@@ -1485,7 +1491,7 @@
         var bubble = document.createElement("div");
         bubble.className = "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm " +
           (role === "user"
-            ? "bg-slate-950 text-white"
+            ? "bg-emerald-50 text-slate-900"
             : "bg-slate-100 text-slate-900");
         bubble.textContent = text;
 

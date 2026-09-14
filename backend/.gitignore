@@ -481,3 +481,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local secrets (OpenRouter key, local model overrides)
+**/appsettings.Local.json

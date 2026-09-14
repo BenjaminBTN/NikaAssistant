@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using NikaAssistant.Application.Abstractions;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -15,25 +15,12 @@ public sealed class OpenRouterClient : ILlmClient
     };
 
     private readonly HttpClient _httpClient;
-    private readonly string _apiKey;
-    private readonly string _model;
-    private readonly string[] _fallbackModels;
-    private readonly string _referer;
-    private readonly string _title;
+    private readonly IOptionsMonitor<OpenRouterOptions> _options;
 
-    public OpenRouterClient(HttpClient httpClient, IConfiguration configuration)
+    public OpenRouterClient(HttpClient httpClient, IOptionsMonitor<OpenRouterOptions> options)
     {
         _httpClient = httpClient;
-        _apiKey = configuration["OpenRouter:ApiKey"]
-            ?? throw new InvalidOperationException("OpenRouter:ApiKey не задан в конфигурации.");
-        _model = configuration["OpenRouter:Model"] ?? "openai/gpt-4o";
-        _fallbackModels = configuration.GetSection("OpenRouter:FallbackModels").GetChildren()
-            .Select(c => c.Value)
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v!)
-            .ToArray();
-        _referer = configuration["OpenRouter:Referer"] ?? "https://nika-assistant.example.com";
-        _title = configuration["OpenRouter:Title"] ?? "NikaAssistant";
+        _options = options;
         _httpClient.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
     }
 
@@ -43,27 +30,50 @@ public sealed class OpenRouterClient : ILlmClient
         CancellationToken cancellationToken = default,
         string? forceToolName = null)
     {
+        // Опции читаются на каждый запрос: правка appsettings.json / appsettings.Local.json
+        // или env-переменных применяется без пересборки (JSON — без рестарта).
+        var snapshot = _options.CurrentValue;
+        var apiKey = string.IsNullOrWhiteSpace(snapshot.ApiKey)
+            ? Environment.GetEnvironmentVariable("OPENROUTER_API_KEY")
+            : snapshot.ApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return new LlmResponse(
+                "OpenRouter:ApiKey не задан. Укажите ключ в appsettings.Local.json, appsettings.json (поле OpenRouter:ApiKey) или env-переменной OpenRouter__ApiKey / OPENROUTER_API_KEY.",
+                Array.Empty<LlmToolCall>(),
+                IsError: true,
+                ErrorKind: LlmErrorKind.ProviderError);
+        }
+
+        var model = string.IsNullOrWhiteSpace(snapshot.Model) ? "openai/gpt-4o" : snapshot.Model;
+        var fallbackModels = snapshot.FallbackModels?
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!.Trim())
+            .ToArray() ?? [];
+        var referer = string.IsNullOrWhiteSpace(snapshot.Referer) ? "https://nika-assistant.example.com" : snapshot.Referer;
+        var title = string.IsNullOrWhiteSpace(snapshot.Title) ? "NikaAssistant" : snapshot.Title;
+
         var requestMessages = messages.Select(ToRequestMessage).ToArray();
         var toolDefinitions = tools?.Select(ToToolDefinition).ToArray();
 
         // OpenRouter сам переберёт модели по порядку, если основная отвалилась (DEGRADED, rate limit и т.п.).
         string[]? models = null;
-        if (_fallbackModels.Length > 0)
+        if (fallbackModels.Length > 0)
         {
-            models = new string[_fallbackModels.Length + 1];
-            models[0] = _model;
-            Array.Copy(_fallbackModels, 0, models, 1, _fallbackModels.Length);
+            models = new string[fallbackModels.Length + 1];
+            models[0] = model;
+            Array.Copy(fallbackModels, 0, models, 1, fallbackModels.Length);
         }
 
-        var request = new ChatCompletionRequest(_model, requestMessages, toolDefinitions, models,
+        var request = new ChatCompletionRequest(model, requestMessages, toolDefinitions, models,
             forceToolName is null ? null : new ToolChoice("function", new ToolChoiceFunction(forceToolName)));
 
         var json = JsonSerializer.Serialize(request, JsonOptions);
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-        httpRequest.Headers.Add("HTTP-Referer", _referer);
-        httpRequest.Headers.Add("X-Title", _title);
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        httpRequest.Headers.Add("HTTP-Referer", referer);
+        httpRequest.Headers.Add("X-Title", title);
         httpRequest.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
