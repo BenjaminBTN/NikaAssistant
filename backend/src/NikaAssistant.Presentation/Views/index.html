@@ -172,23 +172,16 @@
 
     <section class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div class="w-full min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div>
-            <h2 class="text-lg font-bold">Список задач</h2>
-            <p class="mt-1 text-sm text-slate-500">Сначала срочное, затем зависшее и ожидания</p>
-          </div>
-        </div>
-
         <table id="tasks-table" class="w-full min-w-0 text-left md:table-fixed">
           <thead class="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th class="w-[8%] px-4 py-3 text-center font-semibold">Статус</th>
-              <th class="w-[28%] px-4 py-3 font-semibold">Задача</th>
+              <th class="w-[32%] px-4 py-3 font-semibold">Задача</th>
               <th class="w-[13%] px-4 py-3 text-center font-semibold">Срок</th>
               <th class="w-[13%] px-4 py-3 font-semibold">Ответственный</th>
               <th class="w-[11%] px-4 py-3 text-center font-semibold">Теги</th>
               <th class="w-[17%] px-4 py-3 font-semibold">Комментарий</th>
-              <th class="w-[10%] px-4 py-3 text-center font-semibold"></th>
+              <th class="w-[6%] px-2 py-3 text-center font-semibold"></th>
             </tr>
           </thead>
           <tbody id="tasks-body">
@@ -245,7 +238,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Теги</label>
-          <div id="task-tags" class="mt-1 flex flex-wrap gap-3">
+          <div id="task-tags" class="mt-1 grid grid-cols-3 gap-3">
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Срочно" /> Срочно</label>
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Зависло" /> Зависло</label>
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ожидание" /> Ожидание</label>
@@ -327,6 +320,18 @@
 
       ensureDefaultDueDate();
 
+      // Теги "Ежемесячно" и "Ежегодно" взаимоисключающие — выбор одного снимает другой.
+      var monthlyCb = form.querySelector('input[name="tag"][value="Ежемесячно"]');
+      var yearlyCb = form.querySelector('input[name="tag"][value="Ежегодно"]');
+      if (monthlyCb && yearlyCb) {
+        monthlyCb.addEventListener("change", function () {
+          if (monthlyCb.checked) yearlyCb.checked = false;
+        });
+        yearlyCb.addEventListener("change", function () {
+          if (yearlyCb.checked) monthlyCb.checked = false;
+        });
+      }
+
       openBtn.addEventListener("click", showModal);
       cancelBtn.addEventListener("click", hideModal);
       modal.addEventListener("click", function (e) {
@@ -358,6 +363,11 @@
         tagInputs.forEach(function (cb) {
           if (cb.checked) selectedTags.push(cb.value);
         });
+
+        if (selectedTags.indexOf("Ежемесячно") !== -1 && selectedTags.indexOf("Ежегодно") !== -1) {
+          alert('Нельзя одновременно выбирать теги "Ежемесячно" и "Ежегодно"');
+          return;
+        }
 
         var rawDue = form.dueDate ? form.dueDate.value : "";
         var payload = {
@@ -533,7 +543,7 @@
         return dd + "." + mm + "." + yyyy + " " + hh + ":" + min;
       }
 
-      var groupCollapsed = { overdue: false, today: false, tomorrow: false, later: false, monthly: false, yearly: false };
+      var groupCollapsed = { overdue: false, today: false, tomorrow: false, later: true, monthly: true, yearly: true };
 
       function taskIdentity(t) {
         return {
@@ -847,10 +857,10 @@
         var yearlyRow = bucket === "yearly" || isYearlyRow(t);
         var recurringRow = monthlyRow || yearlyRow;
         if (recurringRow) {
-          // Ежемесячные/ежегодные не отмечаются выполненными — кружок с "m"/"y", без действий.
+          // Ежемесячные/ежегодные не отмечаются выполненными — кружок с "M"/"Y", без действий.
           var recurringMark = document.createElement("span");
           recurringMark.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-sm font-semibold text-slate-500 select-none";
-          recurringMark.textContent = yearlyRow ? "y" : "m";
+          recurringMark.textContent = yearlyRow ? "Y" : "M";
           recurringMark.title = yearlyRow ? "Ежегодная задача" : "Ежемесячная задача";
           statusCell.appendChild(recurringMark);
         } else {
@@ -897,7 +907,7 @@
         if (tagsView.childElementCount === 0) {
           var tagsEditBtn = document.createElement("button");
           tagsEditBtn.type = "button";
-          tagsEditBtn.className = "rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900";
+          tagsEditBtn.className = "rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-slate-900";
           tagsEditBtn.title = "Изменить теги";
           tagsEditBtn.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
           tagsEditBtn.addEventListener("click", function (e) {
@@ -928,8 +938,10 @@
         actionCell.className = "px-2 py-4 text-center align-top";
         var deleteBtn = document.createElement("button");
         deleteBtn.type = "button";
-        deleteBtn.className = "rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 whitespace-nowrap";
-        deleteBtn.textContent = "Удалить";
+        deleteBtn.className = "rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-700";
+        deleteBtn.title = "Удалить задачу";
+        deleteBtn.setAttribute("aria-label", "Удалить задачу");
+        deleteBtn.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
         deleteBtn.addEventListener("click", function () {
           deleteTask(t, tr);
         });
