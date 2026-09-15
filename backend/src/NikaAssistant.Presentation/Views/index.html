@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Проблемы дня - прототип</title>
+  <title>Задачи дня</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%237B2FF7'/%3E%3Cpath%20d='M18%2033l10%2010%2018-20'%20stroke='white'%20stroke-width='7'%20fill='none'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E">
   <style>
     html, body {
       width: 100%;
@@ -25,6 +26,27 @@
     }
     .task-row-new {
       animation: taskRowFlash 1.5s ease-out;
+    }
+    .task-row-moved {
+      animation: taskRowFlash 1.5s ease-out;
+    }
+    #tasks-body tr {
+      transition: opacity 0.18s ease;
+    }
+    #tasks-body tr.task-row-fading {
+      opacity: 0;
+    }
+    .task-move-ghost {
+      margin: 0;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      border-collapse: collapse;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.18);
+      overflow: hidden;
+      pointer-events: none;
+      transition: transform 0.45s cubic-bezier(0.22, 0.8, 0.3, 1), opacity 0.45s ease;
+      will-change: transform;
     }
     .comment-view {
       display: -webkit-box;
@@ -74,6 +96,32 @@
         min-width: 0 !important;
         width: 100% !important;
       }
+      /* Гост анимации переезда вне #tasks-table: дублируем мобильную раскладку,
+         иначе ячейки схлопываются и текст перестраивается в одну строку. */
+      .task-move-ghost,
+      .task-move-ghost tbody,
+      .task-move-ghost tr,
+      .task-move-ghost td {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+      }
+      .task-move-ghost tr:not(.due-group-header) {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 0.5rem 0;
+      }
+      .task-move-ghost td {
+        border: 0 !important;
+        padding: 0.25rem 1rem !important;
+        text-align: left !important;
+        white-space: normal !important;
+      }
+      .task-move-ghost td > div,
+      .task-move-ghost td > textarea,
+      .task-move-ghost td > input {
+        max-width: 100%;
+        white-space: normal !important;
+      }
     }
   </style>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -100,25 +148,25 @@
 
   <main class="mx-auto w-full max-w-none min-w-0 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
     <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <div id="card-urgent" class="cursor-pointer rounded-lg border border-red-200 bg-red-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+      <div id="card-urgent" class="cursor-pointer rounded-lg border border-red-200 bg-red-50 px-4 py-3 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Срочно</div>
-        <div id="count-urgent" class="mt-2 text-4xl font-bold text-slate-950">0</div>
-        <div class="mt-2 text-sm text-slate-600">Требуют действия сейчас</div>
+        <div id="count-urgent" class="mt-1 text-2xl font-bold text-slate-950">0</div>
+        <div class="mt-1 text-xs text-slate-600">Требуют действия сейчас</div>
       </div>
-      <div id="card-stuck" class="cursor-pointer rounded-lg border border-orange-200 bg-orange-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+      <div id="card-stuck" class="cursor-pointer rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Зависло</div>
-        <div id="count-stuck" class="mt-2 text-4xl font-bold text-slate-950">0</div>
-        <div class="mt-2 text-sm text-slate-600">Нужно подтолкнуть участника</div>
+        <div id="count-stuck" class="mt-1 text-2xl font-bold text-slate-950">0</div>
+        <div class="mt-1 text-xs text-slate-600">Нужно подтолкнуть участника</div>
       </div>
-      <div id="card-waiting" class="cursor-pointer rounded-lg border border-blue-200 bg-blue-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+      <div id="card-waiting" class="cursor-pointer rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">Ожидание ответа</div>
-        <div id="count-waiting" class="mt-2 text-4xl font-bold text-slate-950">0</div>
-        <div class="mt-2 text-sm text-slate-600">Письма, подрядчики, HR</div>
+        <div id="count-waiting" class="mt-1 text-2xl font-bold text-slate-950">0</div>
+        <div class="mt-1 text-xs text-slate-600">Письма, подрядчики, HR</div>
       </div>
-      <div id="card-control" class="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+      <div id="card-control" class="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
         <div class="text-sm font-medium text-slate-600">На контроле</div>
-        <div id="count-control" class="mt-2 text-4xl font-bold text-slate-950">0</div>
-        <div class="mt-2 text-sm text-slate-600">Проверить статус у ответственных</div>
+        <div id="count-control" class="mt-1 text-2xl font-bold text-slate-950">0</div>
+        <div class="mt-1 text-xs text-slate-600">Проверить статус у ответственных</div>
       </div>
     </section>
 
@@ -201,6 +249,8 @@
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Срочно" /> Срочно</label>
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Зависло" /> Зависло</label>
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ожидание" /> Ожидание</label>
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ежемесячно" /> Ежемесячно</label>
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ежегодно" /> Ежегодно</label>
           </div>
         </div>
         <div>
@@ -332,8 +382,53 @@
             var created = null;
             try { created = await res.json(); } catch (e) { created = null; }
 
-            if (created && window.appendTask) {
+            var isMonthly = selectedTags.indexOf("Ежемесячно") !== -1;
+            var isYearly = selectedTags.indexOf("Ежегодно") !== -1;
+            var appendMonthly = window.appendMonthlyTask || window.appendTask;
+            var appendYearly = window.appendYearlyTask || window.appendTask;
+
+            // Ежемесячная/ежегодная с датой сегодня/завтра сразу расщепляется на бэкенде
+            // (копия в one-time + сдвиг на месяц/год) — перечитываем оба списка,
+            // чтобы показать актуальное состояние, а не оптимистичное,
+            // затем подсвечиваем и проматываем к новой задаче.
+            if ((isMonthly || isYearly) && window.loadTasks) {
+              await window.loadTasks();
+              var recurringTitle = (created && created.task) || payload.task;
+              if (recurringTitle) {
+                if (isMonthly && window.markMonthlyNew) {
+                  window.markMonthlyNew(recurringTitle);
+                }
+                if (isYearly && window.markYearlyNew) {
+                  window.markYearlyNew(recurringTitle);
+                }
+              }
+              return;
+            }
+
+            if (created && isMonthly && appendMonthly) {
+              appendMonthly(created);
+            } else if (created && isYearly && appendYearly) {
+              appendYearly(created);
+            } else if (created && window.appendTask) {
               window.appendTask(created);
+            } else if (isMonthly && appendMonthly) {
+              appendMonthly({
+                task: payload.task,
+                assignee: payload.assignee || window.defaultAssignee || "",
+                comment: payload.comment,
+                tags: payload.tags || [],
+                dueDate: payload.dueDate || "",
+                status: "[ ]"
+              });
+            } else if (isYearly && appendYearly) {
+              appendYearly({
+                task: payload.task,
+                assignee: payload.assignee || window.defaultAssignee || "",
+                comment: payload.comment,
+                tags: payload.tags || [],
+                dueDate: payload.dueDate || "",
+                status: "[ ]"
+              });
             } else if (window.appendTask) {
               window.appendTask({
                 task: payload.task,
@@ -367,6 +462,15 @@
         { key: "Зависло", cls: "bg-orange-50 text-orange-700 ring-orange-200" },
         { key: "Ожидание", cls: "bg-blue-50 text-blue-700 ring-blue-200" }
       ];
+
+      // Теги "Ежемесячно"/"Ежегодно" отображаем, но не даём выбирать при редактировании —
+      // они доступны только в форме создания.
+      var MONTHLY_TAG = "Ежемесячно";
+      var YEARLY_TAG = "Ежегодно";
+      var TAGS_DISPLAY = TAGS.concat([
+        { key: MONTHLY_TAG, cls: "bg-slate-100 text-slate-600 ring-slate-200" },
+        { key: YEARLY_TAG, cls: "bg-slate-100 text-slate-600 ring-slate-200" }
+      ]);
 
       function getTaskTags(t) {
         if (Array.isArray(t.tags)) return t.tags;
@@ -429,7 +533,7 @@
         return dd + "." + mm + "." + yyyy + " " + hh + ":" + min;
       }
 
-      var groupCollapsed = { overdue: false, today: false, tomorrow: false, later: false };
+      var groupCollapsed = { overdue: false, today: false, tomorrow: false, later: false, monthly: false, yearly: false };
 
       function taskIdentity(t) {
         return {
@@ -442,8 +546,42 @@
       }
 
       var allTasks = [];
+      var monthlyTasks = [];
+      var yearlyTasks = [];
       var defaultAssignee = "";
       var currentFilter = null;
+      var taskUidCounter = 0;
+
+      function isMonthlyRow(t) {
+        return !!t._monthly;
+      }
+
+      function isYearlyRow(t) {
+        return !!t._yearly;
+      }
+
+      function updateEndpointFor(t) {
+        if (isYearlyRow(t)) return "/UpdateYearlyTask";
+        return isMonthlyRow(t) ? "/UpdateMonthlyTask" : "/UpdateTask";
+      }
+
+      function deleteEndpointFor(t) {
+        if (isYearlyRow(t)) return "/DeleteYearlyTask";
+        return isMonthlyRow(t) ? "/DeleteMonthlyTask" : "/DeleteTask";
+      }
+
+      function hasMonthlyTag(t) {
+        return getTaskTags(t).indexOf(MONTHLY_TAG) !== -1;
+      }
+
+      function hasYearlyTag(t) {
+        return getTaskTags(t).indexOf(YEARLY_TAG) !== -1;
+      }
+
+      function ensureTaskUid(t) {
+        if (!t._uid) t._uid = ++taskUidCounter;
+        return t._uid;
+      }
 
       function isDone(t) {
         return (t.status || "").toLowerCase().indexOf("x") !== -1;
@@ -610,13 +748,6 @@
 
         tbody.innerHTML = "";
 
-        if (visible.length === 0) {
-          tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="7">' +
-            (currentFilter ? "Нет задач по выбранному фильтру" : "Нет задач") +
-            '</td></tr>';
-          return;
-        }
-
         var now = new Date();
         var todayMidnight = startOfDay(now);
         var tomorrowMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000);
@@ -629,6 +760,8 @@
         });
 
         function sortByTime(a, b) {
+          var da = isDone(a) ? 1 : 0, db = isDone(b) ? 1 : 0;
+          if (da !== db) return da - db;
           var pa = parseDue(getDueDate(a)), pb = parseDue(getDueDate(b));
           var ta = pa ? pa.date.getTime() : 0, tb = pb ? pb.date.getTime() : 0;
           return ta - tb;
@@ -637,6 +770,17 @@
         buckets.today.sort(sortByTime);
         buckets.tomorrow.sort(sortByTime);
         buckets.later.sort(sortByTime);
+
+        // При фильтре по верхним карточкам ежемесячные/ежегодные шаблоны не показываем.
+        var monthlyList = currentFilter ? [] : monthlyTasks.slice().sort(sortByTime);
+        var yearlyList = currentFilter ? [] : yearlyTasks.slice().sort(sortByTime);
+
+        if (visible.length === 0 && monthlyList.length === 0 && yearlyList.length === 0) {
+          tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="7">' +
+            (currentFilter ? "Нет задач по выбранному фильтру" : "Нет задач") +
+            '</td></tr>';
+          return;
+        }
 
         DUE_GROUPS.forEach(function (group) {
           var list = buckets[group.key];
@@ -647,12 +791,41 @@
             appendTaskRow(tbody, t, group.key);
           });
         });
+
+        // Раскрывающие списки ежемесячных/ежегодных задач внизу (как остальные: скрыты, если пусты).
+        // Дату показываем как в "Позднее".
+        // monthlyList/yearlyList уже вычислены выше с учётом currentFilter.
+        if (monthlyList.length > 0) {
+          monthlyList.forEach(function (t) {
+            if (t._new) groupCollapsed.monthly = false;
+          });
+          var monthlyGroup = { key: "monthly", title: "Ежемесячно" };
+          tbody.appendChild(createGroupHeader(monthlyGroup, monthlyList.length));
+          if (!groupCollapsed.monthly) {
+            monthlyList.forEach(function (t) {
+              appendTaskRow(tbody, t, "monthly");
+            });
+          }
+        }
+
+        if (yearlyList.length > 0) {
+          yearlyList.forEach(function (t) {
+            if (t._new) groupCollapsed.yearly = false;
+          });
+          var yearlyGroup = { key: "yearly", title: "Ежегодно" };
+          tbody.appendChild(createGroupHeader(yearlyGroup, yearlyList.length));
+          if (!groupCollapsed.yearly) {
+            yearlyList.forEach(function (t) {
+              appendTaskRow(tbody, t, "yearly");
+            });
+          }
+        }
       }
 
       function renderTags(container, tags) {
         container.innerHTML = "";
         tags.forEach(function (tag) {
-          var found = TAGS.filter(function (x) { return x.key === tag; })[0];
+          var found = TAGS_DISPLAY.filter(function (x) { return x.key === tag; })[0];
           var span = document.createElement("span");
           span.className = "rounded-md px-2.5 py-1 text-xs font-medium ring-1 " +
             (found ? found.cls : "bg-slate-100 text-slate-700 ring-slate-200");
@@ -665,21 +838,34 @@
         var done = (t.status || "").indexOf("x") !== -1;
         var tr = document.createElement("tr");
         tr.className = "border-b border-slate-200";
+        tr.setAttribute("data-uid", ensureTaskUid(t));
         if (bucket) tr.setAttribute("data-group-row", bucket);
 
         var statusCell = document.createElement("td");
         statusCell.className = "flex justify-center px-4 py-4";
-        var checkBtn = document.createElement("button");
-        checkBtn.type = "button";
-        checkBtn.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors " +
-          (done
-            ? "border-emerald-600 bg-emerald-600 text-white"
-            : "border-slate-300 bg-white text-transparent hover:border-emerald-500");
-        checkBtn.innerHTML = '<svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-9"/></svg>';
-        checkBtn.addEventListener("click", function () {
-          toggleStatus(t, checkBtn, tr);
-        });
-        statusCell.appendChild(checkBtn);
+        var monthlyRow = bucket === "monthly" || isMonthlyRow(t);
+        var yearlyRow = bucket === "yearly" || isYearlyRow(t);
+        var recurringRow = monthlyRow || yearlyRow;
+        if (recurringRow) {
+          // Ежемесячные/ежегодные не отмечаются выполненными — кружок с "m"/"y", без действий.
+          var recurringMark = document.createElement("span");
+          recurringMark.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-sm font-semibold text-slate-500 select-none";
+          recurringMark.textContent = yearlyRow ? "y" : "m";
+          recurringMark.title = yearlyRow ? "Ежегодная задача" : "Ежемесячная задача";
+          statusCell.appendChild(recurringMark);
+        } else {
+          var checkBtn = document.createElement("button");
+          checkBtn.type = "button";
+          checkBtn.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors " +
+            (done
+              ? "border-emerald-600 bg-emerald-600 text-white"
+              : "border-slate-300 bg-white text-transparent hover:border-emerald-500");
+          checkBtn.innerHTML = '<svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-9"/></svg>';
+          checkBtn.addEventListener("click", function () {
+            toggleStatus(t, checkBtn, tr);
+          });
+          statusCell.appendChild(checkBtn);
+        }
 
         var taskCell = document.createElement("td");
         taskCell.className = "px-4 py-4 align-top";
@@ -723,6 +909,7 @@
         tagsCell.appendChild(tagsWrap);
 
         var effectiveBucket = bucket;
+        if (effectiveBucket === "monthly" || effectiveBucket === "yearly") effectiveBucket = "later";
         if (!effectiveBucket) {
           var _now = new Date();
           var _today = startOfDay(_now);
@@ -821,7 +1008,7 @@
         renderTaskName(cell, t);
 
         try {
-          var res = await fetch("/UpdateTask", {
+          var res = await fetch(updateEndpointFor(t), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -904,7 +1091,7 @@
         updateSummary();
 
         try {
-          var res = await fetch("/UpdateTask", {
+          var res = await fetch(updateEndpointFor(t), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -944,6 +1131,102 @@
         }
       }
 
+      function flashMovedRow(t) {
+        var row = document.querySelector('#tasks-body tr[data-uid="' + t._uid + '"]');
+        if (!row) return;
+        row.classList.add("task-row-moved");
+        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        setTimeout(function () { row.classList.remove("task-row-moved"); }, 1500);
+      }
+
+      function animateTaskMove(oldTr, t) {
+        var oldRect = oldTr && oldTr.isConnected ? oldTr.getBoundingClientRect() : null;
+        // Замеряем раскладку ДО перерисовки: без контекста колонок thead
+        // клон схлопывается и многострочный текст перестраивается в одну строку.
+        var frozen = null;
+        if (oldRect && oldTr) {
+          try {
+            var srcTable = document.getElementById("tasks-table");
+            var tableCs = srcTable ? window.getComputedStyle(srcTable) : null;
+            var trCs = window.getComputedStyle(oldTr);
+            var srcCells = oldTr.children;
+            var cells = [];
+            for (var i = 0; i < srcCells.length; i++) {
+              var c = srcCells[i];
+              var cs = window.getComputedStyle(c);
+              var r = c.getBoundingClientRect();
+              cells.push({ display: cs.display, width: r.width });
+            }
+            frozen = {
+              trDisplay: trCs.display,
+              cells: cells,
+              tableLayout: tableCs ? tableCs.tableLayout : "fixed",
+              borderCollapse: tableCs ? tableCs.borderCollapse : "collapse"
+            };
+          } catch (e) { frozen = null; }
+        }
+        renderTasks();
+        if (!oldRect) {
+          flashMovedRow(t);
+          return;
+        }
+        var newRow = document.querySelector('#tasks-body tr[data-uid="' + t._uid + '"]');
+        if (!newRow) return;
+        var newRect = newRow.getBoundingClientRect();
+        var dx = newRect.left - oldRect.left;
+        var dy = newRect.top - oldRect.top;
+        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
+          flashMovedRow(t);
+          return;
+        }
+
+        var ghost = document.createElement("table");
+        ghost.className = "task-move-ghost";
+        ghost.style.position = "fixed";
+        ghost.style.left = oldRect.left + "px";
+        ghost.style.top = oldRect.top + "px";
+        ghost.style.width = oldRect.width + "px";
+        ghost.style.height = oldRect.height + "px";
+        ghost.style.zIndex = "60";
+        if (frozen) {
+          ghost.style.tableLayout = "fixed";
+          ghost.style.borderCollapse = frozen.borderCollapse || "collapse";
+        }
+        var ghostBody = document.createElement("tbody");
+        var clone = oldTr.cloneNode(true);
+        clone.removeAttribute("data-uid");
+        if (frozen) {
+          clone.style.display = frozen.trDisplay;
+          clone.style.width = oldRect.width + "px";
+          var cloneCells = clone.children;
+          for (var j = 0; j < cloneCells.length && j < frozen.cells.length; j++) {
+            cloneCells[j].style.display = frozen.cells[j].display;
+            cloneCells[j].style.width = frozen.cells[j].width + "px";
+            cloneCells[j].style.maxWidth = frozen.cells[j].width + "px";
+            cloneCells[j].style.boxSizing = "border-box";
+          }
+        }
+        ghostBody.appendChild(clone);
+        ghost.appendChild(ghostBody);
+        document.body.appendChild(ghost);
+
+        newRow.style.visibility = "hidden";
+        // Форсируем layout, чтобы transition сработал от стартовой позиции.
+        void ghost.offsetWidth;
+        ghost.style.transform = "translate(" + dx + "px," + dy + "px)";
+
+        var finished = false;
+        function cleanup() {
+          if (finished) return;
+          finished = true;
+          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+          newRow.style.visibility = "";
+          flashMovedRow(t);
+        }
+        ghost.addEventListener("transitionend", cleanup);
+        setTimeout(cleanup, 550);
+      }
+
       async function toggleStatus(t, checkBtn, tr) {
         var wasDone = (t.status || "").indexOf("x") !== -1;
         var newStatus = wasDone ? "[ ]" : "[x]";
@@ -952,7 +1235,7 @@
         renderStatus(checkBtn, taskTitleEl, !wasDone);
 
         try {
-          var res = await fetch("/UpdateTask", {
+          var res = await fetch(updateEndpointFor(t), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -971,13 +1254,25 @@
           } else {
             renderStatus(checkBtn, taskTitleEl, wasDone);
             alert("Не удалось обновить статус");
+            updateSummary();
+            renderTasks();
+            return;
           }
         } catch (err) {
           renderStatus(checkBtn, taskTitleEl, wasDone);
           alert("Ошибка при обновлении статуса");
+          updateSummary();
+          renderTasks();
+          return;
         }
+        ensureTaskUid(t);
         updateSummary();
-        renderTasks();
+        if (tr && tr.isConnected) {
+          tr.classList.add("task-row-fading");
+          setTimeout(function () { animateTaskMove(tr, t); }, 160);
+        } else {
+          animateTaskMove(tr, t);
+        }
       }
 
       var tagPopup = null;
@@ -1055,12 +1350,19 @@
         });
 
         var previous = getTaskTags(t);
+        // Теги "Ежемесячно"/"Ежегодно" недоступны для редактирования — молча сохраняем, если были.
+        if (previous.indexOf(MONTHLY_TAG) !== -1 && selected.indexOf(MONTHLY_TAG) === -1) {
+          selected.push(MONTHLY_TAG);
+        }
+        if (previous.indexOf(YEARLY_TAG) !== -1 && selected.indexOf(YEARLY_TAG) === -1) {
+          selected.push(YEARLY_TAG);
+        }
         t.tags = selected.slice();
         updateSummary();
         renderTasks();
 
         try {
-          var res = await fetch("/UpdateTask", {
+          var res = await fetch(updateEndpointFor(t), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1160,7 +1462,7 @@
         refreshCommentCell(cell, t);
 
         try {
-          var res = await fetch("/UpdateTask", {
+          var res = await fetch(updateEndpointFor(t), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1268,12 +1570,15 @@
 
       async function updateDueDate(t, newDueBackend) {
         var previous = getDueDate(t) || "";
+        var wasMonthly = isMonthlyRow(t);
+        var wasYearly = isYearlyRow(t);
+        var wasRecurring = wasMonthly || wasYearly;
         t.dueDate = newDueBackend;
         t.DueDate = newDueBackend;
         renderTasks();
 
         try {
-          var res = await fetch("/UpdateTask", {
+          var res = await fetch(updateEndpointFor(t), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1293,6 +1598,11 @@
             t.DueDate = previous;
             renderTasks();
             alert("Не удалось обновить срок");
+          } else if (wasRecurring && window.loadTasks) {
+            // Ручная смена даты ежемесячной/ежегодной на сегодня/завтра расщепляется
+            // на бэкенде — перечитываем списки, чтобы увидеть копию в one-time
+            // и сдвинутую дату повторяемой задачи.
+            await window.loadTasks();
           }
         } catch (err) {
           t.dueDate = previous;
@@ -1314,7 +1624,7 @@
         };
 
         try {
-          var res = await fetch("/DeleteTask", {
+          var res = await fetch(deleteEndpointFor(t), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -1324,6 +1634,10 @@
             if (row && row.parentNode) row.parentNode.removeChild(row);
             var idx = allTasks.indexOf(t);
             if (idx !== -1) allTasks.splice(idx, 1);
+            var midx = monthlyTasks.indexOf(t);
+            if (midx !== -1) monthlyTasks.splice(midx, 1);
+            var yidx = yearlyTasks.indexOf(t);
+            if (yidx !== -1) yearlyTasks.splice(yidx, 1);
             updateSummary();
             renderTasks();
           } else {
@@ -1366,8 +1680,63 @@
 
       window.appendTask = function (t) {
         if (!t) return;
+        // Скопированные one-time с тегами "Ежемесячно"/"Ежегодно" живут в основном списке (попадают в "Завтра").
         if (allTasks.indexOf(t) === -1) allTasks.push(t);
         t._new = true;
+        updateSummary();
+        renderTasks();
+      };
+
+      window.appendMonthlyTask = function (t) {
+        if (!t) return;
+        t._monthly = true;
+        if (!hasMonthlyTag(t)) {
+          t.tags = (getTaskTags(t)).concat([MONTHLY_TAG]);
+        }
+        if (monthlyTasks.indexOf(t) === -1) monthlyTasks.push(t);
+        t._new = true;
+        updateSummary();
+        renderTasks();
+      };
+
+      // Подсветка и проматывание к только что созданной ежемесячной задаче
+      // после перезагрузки списков (флаг _new при loadTasks теряется).
+      window.markMonthlyNew = function (title) {
+        if (!title) return;
+        var needle = String(title).toLowerCase();
+        var target = null;
+        monthlyTasks.forEach(function (t) {
+          if ((t.task || "").toLowerCase() === needle) target = t;
+        });
+        if (!target) return;
+        target._new = true;
+        updateSummary();
+        renderTasks();
+      };
+
+      window.appendYearlyTask = function (t) {
+        if (!t) return;
+        t._yearly = true;
+        if (!hasYearlyTag(t)) {
+          t.tags = (getTaskTags(t)).concat([YEARLY_TAG]);
+        }
+        if (yearlyTasks.indexOf(t) === -1) yearlyTasks.push(t);
+        t._new = true;
+        updateSummary();
+        renderTasks();
+      };
+
+      // Подсветка и проматывание к только что созданной ежегодной задаче
+      // после перезагрузки списков (флаг _new при loadTasks теряется).
+      window.markYearlyNew = function (title) {
+        if (!title) return;
+        var needle = String(title).toLowerCase();
+        var target = null;
+        yearlyTasks.forEach(function (t) {
+          if ((t.task || "").toLowerCase() === needle) target = t;
+        });
+        if (!target) return;
+        target._new = true;
         updateSummary();
         renderTasks();
       };
@@ -1383,6 +1752,26 @@
           if (!Array.isArray(tasks)) return;
 
           allTasks = tasks.slice();
+          try {
+            var mres = await fetch("/GetMonthlyTasks");
+            if (mres.ok) {
+              var mtasks = await mres.json();
+              if (Array.isArray(mtasks)) {
+                mtasks.forEach(function (t) { t._monthly = true; });
+                monthlyTasks = mtasks;
+              }
+            }
+          } catch (e) { /* ежемесячные опциональны */ }
+          try {
+            var yres = await fetch("/GetYearlyTasks");
+            if (yres.ok) {
+              var ytasks = await yres.json();
+              if (Array.isArray(ytasks)) {
+                ytasks.forEach(function (t) { t._yearly = true; });
+                yearlyTasks = ytasks;
+              }
+            }
+          } catch (e) { /* ежегодные опциональны */ }
           updateSummary();
           renderTasks();
         } catch (e) {
@@ -1468,7 +1857,7 @@
       autoGrowChat();
 
       input.addEventListener("keydown", function (e) {
-        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           form.requestSubmit();
         }
@@ -1491,7 +1880,7 @@
         var bubble = document.createElement("div");
         bubble.className = "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm " +
           (role === "user"
-            ? "bg-emerald-50 text-slate-900"
+            ? "bg-sky-100 text-slate-900"
             : "bg-slate-100 text-slate-900");
         bubble.textContent = text;
 
