@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Проблемы дня - прототип</title>
+  <title>Задачи дня</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%237B2FF7'/%3E%3Cpath%20d='M18%2033l10%2010%2018-20'%20stroke='white'%20stroke-width='7'%20fill='none'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E">
   <style>
     html, body {
       width: 100%;
@@ -738,7 +739,10 @@
         buckets.tomorrow.sort(sortByTime);
         buckets.later.sort(sortByTime);
 
-        if (visible.length === 0 && monthlyTasks.length === 0) {
+        // При фильтре по верхним карточкам ежемесячные шаблоны не показываем.
+        var monthlyList = currentFilter ? [] : monthlyTasks.slice().sort(sortByTime);
+
+        if (visible.length === 0 && monthlyList.length === 0) {
           tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="7">' +
             (currentFilter ? "Нет задач по выбранному фильтру" : "Нет задач") +
             '</td></tr>';
@@ -757,7 +761,7 @@
 
         // Раскрывающий список ежемесячных задач внизу (как остальные: скрыт, если пуст).
         // Дату показываем как в "Позднее".
-        var monthlyList = monthlyTasks.slice().sort(sortByTime);
+        // monthlyList уже вычислен выше с учётом currentFilter.
         if (monthlyList.length === 0) return;
         monthlyList.forEach(function (t) {
           if (t._new) groupCollapsed.monthly = false;
@@ -1783,7 +1787,7 @@
         var bubble = document.createElement("div");
         bubble.className = "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm " +
           (role === "user"
-            ? "bg-emerald-50 text-slate-900"
+            ? "bg-sky-100 text-slate-900"
             : "bg-slate-100 text-slate-900");
         bubble.textContent = text;
 
