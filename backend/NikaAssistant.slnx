@@ -1,0 +1,27 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NikaAssistant.Infrastructure.LLM/NikaAssistant.Infrastructure.LLM.csproj" Id="e103526c-76bd-4e8a-a738-8ac5a87719bc">
+      <BuildDependency Project="src/NikaAssistant.Application/NikaAssistant.Application.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Contracts/NikaAssistant.Contracts.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Domain/NikaAssistant.Domain.csproj" />
+    </Project>
+    <Project Path="src/NikaAssistant.Application/NikaAssistant.Application.csproj" Id="f36fedbb-75fb-4309-875e-b06643f5825a">
+      <BuildDependency Project="src/NikaAssistant.Contracts/NikaAssistant.Contracts.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Domain/NikaAssistant.Domain.csproj" />
+    </Project>
+    <Project Path="src/NikaAssistant.Contracts/NikaAssistant.Contracts.csproj" Id="0d6800cc-f13e-46cd-8387-a2bd44aaf393" />
+    <Project Path="src/NikaAssistant.Domain/NikaAssistant.Domain.csproj" Id="1031ba44-a7b1-442a-a21d-3ff4bda89dec" />
+    <Project Path="src/NikaAssistant.Infrastructure.LocalStorage/NikaAssistant.Infrastructure.LocalStorage.csproj" Id="0330071d-38f9-417e-98bd-3aa89c2f75b2">
+      <BuildDependency Project="src/NikaAssistant.Application/NikaAssistant.Application.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Contracts/NikaAssistant.Contracts.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Domain/NikaAssistant.Domain.csproj" />
+    </Project>
+    <Project Path="src/NikaAssistant.Presentation/NikaAssistant.Presentation.csproj" Id="eae0216b-1da4-4fd2-81a6-5423107ec82d">
+      <BuildDependency Project="src/NikaAssistant.Infrastructure.LLM/NikaAssistant.Infrastructure.LLM.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Application/NikaAssistant.Application.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Contracts/NikaAssistant.Contracts.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Domain/NikaAssistant.Domain.csproj" />
+      <BuildDependency Project="src/NikaAssistant.Infrastructure.LocalStorage/NikaAssistant.Infrastructure.LocalStorage.csproj" />
+    </Project>
+  </Folder>
+</Solution>

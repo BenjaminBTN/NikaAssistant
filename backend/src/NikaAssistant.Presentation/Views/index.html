@@ -1,0 +1,1550 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Проблемы дня - прототип</title>
+  <style>
+    html, body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: clip;
+    }
+    body {
+      min-width: 0;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    img, svg, table {
+      max-width: 100%;
+    }
+    @keyframes taskRowFlash {
+      0% { background-color: #ecfdf5; }
+      100% { background-color: transparent; }
+    }
+    .task-row-new {
+      animation: taskRowFlash 1.5s ease-out;
+    }
+    .comment-view {
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    /* Мобильная адаптация таблицы задач: строки становятся карточками друг под другом,
+       чтобы не было горизонтальной прокрутки. */
+    @media (max-width: 767px) {
+      #tasks-table thead {
+        display: none;
+      }
+      #tasks-table,
+      #tasks-table tbody,
+      #tasks-table tr,
+      #tasks-table td {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+      }
+      #tasks-table tr:not(.due-group-header) {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 0.5rem 0;
+      }
+      #tasks-table tr.due-group-header td {
+        padding: 0.5rem 1rem !important;
+        background: #f8fafc;
+      }
+      #tasks-table td {
+        border: 0 !important;
+        padding: 0.25rem 1rem !important;
+        text-align: left !important;
+        white-space: normal !important;
+      }
+      #tasks-table td > div,
+      #tasks-table td > textarea,
+      #tasks-table td > input {
+        max-width: 100%;
+        white-space: normal !important;
+      }
+      #tasks-table .due-view {
+        white-space: normal !important;
+      }
+      #tasks-table input[type="datetime-local"] {
+        min-width: 0 !important;
+        width: 100% !important;
+      }
+    }
+  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+</head>
+<body class="w-full min-w-0 overflow-x-clip bg-slate-100 text-slate-900">
+  <header class="border-b border-slate-200 bg-white">
+    <div class="mx-auto flex w-full max-w-none flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div class="text-sm font-medium text-slate-500">Личный инструмент Олеси</div>
+        <h1 class="mt-1 text-3xl font-bold tracking-normal text-slate-950">Задачи дня</h1>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="rounded-lg border border-slate-200 px-4 py-2 text-right">
+          <div class="text-xs text-slate-500">Сегодня</div>
+          <div id="today-date" class="text-sm font-semibold">—</div>
+        </div>
+        <button id="add-task-btn" class="rounded-lg bg-gradient-to-r from-[#C061CB] to-[#7B2FF7] px-4 py-2 text-sm font-semibold text-white hover:from-[#B04FC0] hover:to-[#6A28E0]">Добавить задачу</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-none min-w-0 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div id="card-urgent" class="cursor-pointer rounded-lg border border-red-200 bg-red-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+        <div class="text-sm font-medium text-slate-600">Срочно</div>
+        <div id="count-urgent" class="mt-2 text-4xl font-bold text-slate-950">0</div>
+        <div class="mt-2 text-sm text-slate-600">Требуют действия сейчас</div>
+      </div>
+      <div id="card-stuck" class="cursor-pointer rounded-lg border border-orange-200 bg-orange-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+        <div class="text-sm font-medium text-slate-600">Зависло</div>
+        <div id="count-stuck" class="mt-2 text-4xl font-bold text-slate-950">0</div>
+        <div class="mt-2 text-sm text-slate-600">Нужно подтолкнуть участника</div>
+      </div>
+      <div id="card-waiting" class="cursor-pointer rounded-lg border border-blue-200 bg-blue-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+        <div class="text-sm font-medium text-slate-600">Ожидание ответа</div>
+        <div id="count-waiting" class="mt-2 text-4xl font-bold text-slate-950">0</div>
+        <div class="mt-2 text-sm text-slate-600">Письма, подрядчики, HR</div>
+      </div>
+      <div id="card-control" class="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 p-5 transition hover:ring-2 hover:ring-slate-400 hover:ring-offset-2">
+        <div class="text-sm font-medium text-slate-600">На контроле</div>
+        <div id="count-control" class="mt-2 text-4xl font-bold text-slate-950">0</div>
+        <div class="mt-2 text-sm text-slate-600">Проверить статус у ответственных</div>
+      </div>
+    </section>
+
+    <section class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div class="w-full min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 class="text-lg font-bold">Список задач</h2>
+            <p class="mt-1 text-sm text-slate-500">Сначала срочное, затем зависшее и ожидания</p>
+          </div>
+        </div>
+
+        <table id="tasks-table" class="w-full min-w-0 text-left md:table-fixed">
+          <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+            <tr>
+              <th class="w-[8%] px-4 py-3 text-center font-semibold">Статус</th>
+              <th class="w-[28%] px-4 py-3 font-semibold">Задача</th>
+              <th class="w-[13%] px-4 py-3 text-center font-semibold">Срок</th>
+              <th class="w-[13%] px-4 py-3 font-semibold">Ответственный</th>
+              <th class="w-[11%] px-4 py-3 text-center font-semibold">Теги</th>
+              <th class="w-[17%] px-4 py-3 font-semibold">Комментарий</th>
+              <th class="w-[10%] px-4 py-3 text-center font-semibold"></th>
+            </tr>
+          </thead>
+          <tbody id="tasks-body">
+              <tr class="tasks-placeholder border-b border-slate-200">
+                <td class="px-4 py-4 align-top text-sm text-slate-500" colspan="7">Загрузка задач…</td>
+              </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <aside class="w-full min-w-0 space-y-6">
+        <div class="rounded-lg border border-slate-200 bg-white">
+          <div class="border-b border-slate-200 px-5 py-4">
+            <h2 class="text-lg font-bold">Чат с ассистентом</h2>
+          </div>
+          <div id="chat-log" class="h-[300px] space-y-3 overflow-y-auto px-5 py-4">
+            <div class="text-sm text-slate-400">История сообщений пуста.</div>
+          </div>
+          <form id="chat-form" class="flex min-w-0 items-end gap-3 border-t border-slate-200 px-5 py-4">
+            <textarea id="chat-input" rows="1" required placeholder="Введите сообщение…"
+              class="max-h-none min-w-0 flex-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
+            <button type="submit" id="chat-send"
+              class="shrink-0 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">Отправить</button>
+          </form>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-5">
+          <h2 class="text-lg font-bold">Нагрузка по ответственным</h2>
+          <div id="workload-list" class="mt-4 space-y-4">
+            <div class="text-sm text-slate-500">Загрузка…</div>
+          </div>
+        </div>
+
+        <button id="finish-day-btn" type="button" class="mx-auto block w-full max-w-[320px] rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">Завершить день</button>
+      </aside>
+    </section>
+  </main>
+
+  <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div class="w-full max-w-[480px] rounded-xl bg-white p-6 shadow-xl">
+      <h3 class="text-lg font-bold text-slate-950">Новая задача</h3>
+      <form id="task-form" class="mt-4 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Задача</label>
+          <input name="task" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Срок исполнения</label>
+          <input name="dueDate" id="task-due" type="datetime-local" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Ответственный</label>
+          <input name="assignee" id="task-assignee" placeholder="По умолчанию" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Теги</label>
+          <div id="task-tags" class="mt-1 flex flex-wrap gap-3">
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Срочно" /> Срочно</label>
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Зависло" /> Зависло</label>
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ожидание" /> Ожидание</label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Комментарий</label>
+          <textarea name="comment" rows="3" placeholder="Можно с переносами строк…"
+            class="mt-1 block w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-950 focus:outline-none"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="task-cancel" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Отмена</button>
+          <button type="submit" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="comment-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div class="w-[40vw] rounded-xl bg-white p-6 shadow-xl">
+      <h3 class="text-lg font-bold text-slate-950">Комментарий</h3>
+      <form id="comment-form" class="mt-4 space-y-4">
+        <div>
+          <textarea id="comment-text" rows="8" placeholder="Введите комментарий…"
+            class="mt-1 block w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal leading-snug text-slate-700 focus:border-slate-950 focus:outline-none"></textarea>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 pt-2">
+          <button type="button" id="comment-cancel" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Отмена</button>
+          <button type="submit" class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener("load", function () {
+      if (!window.Recharts) {
+        console.log("Recharts CDN не загрузился. Прототип показывает статичные графики.");
+      }
+    });
+
+    (function () {
+      var months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+      var el = document.getElementById("today-date");
+      if (el) {
+        var now = new Date();
+        el.textContent = now.getDate() + " " + months[now.getMonth()] + " " + now.getFullYear();
+      }
+    })();
+
+    (function () {
+      var modal = document.getElementById("task-modal");
+      var openBtn = document.getElementById("add-task-btn");
+      var cancelBtn = document.getElementById("task-cancel");
+      var form = document.getElementById("task-form");
+
+      function showModal() {
+        ensureDefaultDueDate();
+        modal.style.display = "flex";
+      }
+
+      function hideModal() {
+        modal.style.display = "none";
+      }
+
+      // Значение по умолчанию для "Срок исполнения" — сегодня 19:00
+      // (совпадает с TodayString/NormalizeDueDate на бэкенде).
+      function ensureDefaultDueDate() {
+        var input = document.getElementById("task-due") || (form ? form.dueDate : null);
+        if (!input || input.value) return;
+        var d = new Date();
+        d.setHours(19, 0, 0, 0);
+        function pad(n) { return String(n).padStart(2, "0"); }
+        input.value = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+          "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+      }
+
+      ensureDefaultDueDate();
+
+      openBtn.addEventListener("click", showModal);
+      cancelBtn.addEventListener("click", hideModal);
+      modal.addEventListener("click", function (e) {
+        if (e.target === modal) hideModal();
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && modal.style.display === "flex") hideModal();
+      });
+
+      // Подсказка DefaultAssignee в поле "Ответственный" (как в чате: пустое = DefaultAssignee).
+      try {
+        fetch("/Config")
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (cfg) {
+            if (cfg && typeof cfg.defaultAssignee === "string" && cfg.defaultAssignee) {
+              var assigneeInput = document.getElementById("task-assignee");
+              if (assigneeInput) assigneeInput.placeholder = cfg.defaultAssignee + " (по умолчанию)";
+              window.defaultAssignee = cfg.defaultAssignee;
+            }
+          })
+          .catch(function () {});
+      } catch (e) {}
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+
+        var tagInputs = form.querySelectorAll('input[name="tag"]');
+        var selectedTags = [];
+        tagInputs.forEach(function (cb) {
+          if (cb.checked) selectedTags.push(cb.value);
+        });
+
+        var rawDue = form.dueDate ? form.dueDate.value : "";
+        var payload = {
+          task: form.task.value.trim(),
+          assignee: form.assignee.value.trim(),
+          comment: form.comment.value.trim(),
+          tags: selectedTags,
+          dueDate: rawDue ? rawDue.replace("T", " ") : ""
+        };
+
+        try {
+          var res = await fetch("/AddTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            form.reset();
+            hideModal();
+
+            var created = null;
+            try { created = await res.json(); } catch (e) { created = null; }
+
+            if (created && window.appendTask) {
+              window.appendTask(created);
+            } else if (window.appendTask) {
+              window.appendTask({
+                task: payload.task,
+                assignee: payload.assignee || window.defaultAssignee || "",
+                comment: payload.comment,
+                tags: payload.tags || [],
+                dueDate: payload.dueDate || "",
+                status: "[ ]"
+              });
+            } else if (window.loadTasks) {
+              window.loadTasks();
+            }
+          } else {
+            alert("Не удалось добавить задачу");
+          }
+        } catch (err) {
+          alert("Ошибка при отправке задачи");
+        }
+      });
+    })();
+
+    (function () {
+      function escapeHtml(value) {
+        var div = document.createElement("div");
+        div.textContent = value == null ? "" : String(value);
+        return div.innerHTML;
+      }
+
+      var TAGS = [
+        { key: "Срочно", cls: "bg-red-50 text-red-700 ring-red-200" },
+        { key: "Зависло", cls: "bg-orange-50 text-orange-700 ring-orange-200" },
+        { key: "Ожидание", cls: "bg-blue-50 text-blue-700 ring-blue-200" }
+      ];
+
+      function getTaskTags(t) {
+        if (Array.isArray(t.tags)) return t.tags;
+        if (typeof t.tags === "string" && t.tags) return t.tags.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+        return [];
+      }
+
+      function getDueDate(t) {
+        return t.dueDate != null ? t.dueDate : (t.DueDate != null ? t.DueDate : "");
+      }
+
+      function parseDue(value) {
+        if (!value) return null;
+        var normalized = String(value).replace("T", " ").trim();
+        var m = normalized.match(/(\d{4})-(\d{2})-(\d{2})(?:[ ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+        if (!m) return null;
+        var y = +m[1], mo = +m[2] - 1, d = +m[3];
+        var h = m[4] != null ? +m[4] : 0, mi = m[5] != null ? +m[5] : 0;
+        var dt = new Date(y, mo, d, h, mi, 0, 0);
+        if (isNaN(dt.getTime())) return null;
+        return { date: dt, dayKey: m[1] + "-" + m[2] + "-" + m[3], time: (m[4] != null ? m[4] + ":" + m[5] : "") };
+      }
+
+      function startOfDay(dt) {
+        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0);
+      }
+
+      function dueBucket(t, todayMidnight, tomorrowMidnight) {
+        var p = parseDue(getDueDate(t));
+        if (!p) return "today";
+        var day = startOfDay(p.date).getTime();
+        if (day < todayMidnight.getTime()) return "overdue";
+        if (day === todayMidnight.getTime()) return "today";
+        if (day === tomorrowMidnight.getTime()) return "tomorrow";
+        return "later";
+      }
+
+      // В столбце "Срок": Today/Tomorrow — только время, Overdue/Later — только дата.
+      function formatDueCell(t, bucket) {
+        var raw = getDueDate(t);
+        var p = parseDue(raw);
+        if (!p) return "—";
+        if (bucket === "later" || bucket === "overdue") {
+          var dd = String(p.date.getDate()).padStart(2, "0");
+          var mm = String(p.date.getMonth() + 1).padStart(2, "0");
+          return dd + "." + mm + "." + p.date.getFullYear();
+        }
+        return p.time || "—";
+      }
+
+      // Тултип столбца "Срок": всегда дд.мм.гггг чч:мм.
+      function formatDueTooltip(t) {
+        var p = parseDue(getDueDate(t));
+        if (!p) return "";
+        var dd = String(p.date.getDate()).padStart(2, "0");
+        var mm = String(p.date.getMonth() + 1).padStart(2, "0");
+        var yyyy = p.date.getFullYear();
+        var hh = String(p.date.getHours()).padStart(2, "0");
+        var min = String(p.date.getMinutes()).padStart(2, "0");
+        return dd + "." + mm + "." + yyyy + " " + hh + ":" + min;
+      }
+
+      var groupCollapsed = { overdue: false, today: false, tomorrow: false, later: false };
+
+      function taskIdentity(t) {
+        return {
+          status: t.status || "",
+          task: t.task || "",
+          assignee: t.assignee || "",
+          comment: t.comment || "",
+          dueDate: getDueDate(t) || ""
+        };
+      }
+
+      var allTasks = [];
+      var defaultAssignee = "";
+      var currentFilter = null;
+
+      function isDone(t) {
+        return (t.status || "").toLowerCase().indexOf("x") !== -1;
+      }
+
+      function taskMatches(t, type) {
+        if (isDone(t)) return false;
+        var tags = getTaskTags(t);
+        if (type === "urgent") return tags.indexOf("Срочно") !== -1;
+        if (type === "stuck") return tags.indexOf("Зависло") !== -1;
+        if (type === "waiting") return tags.indexOf("Ожидание") !== -1 || tags.indexOf("Ожидание ответа") !== -1;
+        if (type === "control") {
+          var def = (defaultAssignee || "").trim().toLowerCase();
+          var assignee = (t.assignee || "").trim().toLowerCase();
+          return def && assignee !== def;
+        }
+        return false;
+      }
+
+      function setCount(id, value) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = value;
+      }
+
+      function updateSummary() {
+        var counts = { urgent: 0, stuck: 0, waiting: 0, control: 0 };
+
+        allTasks.forEach(function (t) {
+          if (isDone(t)) return;
+          if (taskMatches(t, "urgent")) counts.urgent++;
+          if (taskMatches(t, "stuck")) counts.stuck++;
+          if (taskMatches(t, "waiting")) counts.waiting++;
+          if (taskMatches(t, "control")) counts.control++;
+        });
+
+        setCount("count-urgent", counts.urgent);
+        setCount("count-stuck", counts.stuck);
+        setCount("count-waiting", counts.waiting);
+        setCount("count-control", counts.control);
+
+        updateWorkload();
+      }
+
+      function updateWorkload() {
+        var list = document.getElementById("workload-list");
+        if (!list) return;
+
+        var active = allTasks.filter(function (t) { return !isDone(t); });
+        var map = {};
+        active.forEach(function (t) {
+          var raw = (t.assignee || "").trim();
+          var names = raw ? raw.split(",").map(function (s) { return s.trim(); }).filter(Boolean) : ["Без ответственного"];
+          names.forEach(function (name) {
+            map[name] = (map[name] || 0) + 1;
+          });
+        });
+
+        var entries = Object.keys(map).map(function (k) { return { name: k, count: map[k] }; });
+        entries.sort(function (a, b) { return b.count - a.count; });
+
+        if (entries.length === 0) {
+          list.innerHTML = '<div class="text-sm text-slate-500">Нет активных задач</div>';
+          return;
+        }
+
+        var max = entries[0].count || 1;
+        list.innerHTML = "";
+        entries.forEach(function (e) {
+          var pct = Math.round((e.count / max) * 100);
+          var div = document.createElement("div");
+          div.innerHTML =
+            '<div class="mb-1 flex justify-between text-sm"><span>' + escapeHtml(e.name) + '</span><span>' + e.count + '</span></div>' +
+            '<div class="h-3 rounded bg-slate-100"><div class="h-3 rounded bg-blue-600 transition-all" style="width:' + pct + '%"></div></div>';
+          list.appendChild(div);
+        });
+      }
+
+      var FILTER_TYPES = ["urgent", "stuck", "waiting", "control"];
+
+      function updateCards() {
+        FILTER_TYPES.forEach(function (type) {
+          var el = document.getElementById("card-" + type);
+          if (!el) return;
+          el.classList.remove("ring-2", "ring-slate-900", "ring-offset-2", "shadow-md");
+          el.style.filter = "";
+          if (currentFilter) {
+            if (currentFilter === type) {
+              el.classList.add("ring-2", "ring-slate-900", "ring-offset-2", "shadow-md");
+            } else {
+              el.style.filter = "grayscale(1) opacity(0.55)";
+            }
+          }
+        });
+      }
+
+      function setFilter(type) {
+        currentFilter = (currentFilter === type) ? null : type;
+        updateCards();
+        renderTasks();
+      }
+
+      FILTER_TYPES.forEach(function (type) {
+        var el = document.getElementById("card-" + type);
+        if (el) el.addEventListener("click", function () { setFilter(type); });
+      });
+
+      var DUE_GROUPS = [
+        { key: "overdue", title: "Ранее (нужно перенести)" },
+        { key: "today", title: "Сегодня" },
+        { key: "tomorrow", title: "Завтра" },
+        { key: "later", title: "Позднее" }
+      ];
+
+      function appendTaskRow(tbody, t, bucket) {
+        var row = createTaskRow(t, bucket);
+        if (t._new) {
+          row.classList.add("task-row-new");
+          t._new = false;
+          row.setAttribute("data-new-task", "1");
+          tbody.appendChild(row);
+          row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          setTimeout(function () { row.classList.remove("task-row-new"); }, 1500);
+        } else {
+          tbody.appendChild(row);
+        }
+      }
+
+      function createGroupHeader(group, count) {
+        var tr = document.createElement("tr");
+        tr.className = "due-group-header bg-white";
+        tr.setAttribute("data-group", group.key);
+        var td = document.createElement("td");
+        td.setAttribute("colspan", "7");
+        td.className = "px-4 py-2 align-middle select-none";
+
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "flex items-center gap-2 text-left";
+        var collapsed = !!groupCollapsed[group.key];
+
+        btn.innerHTML =
+          '<span class="due-chevron inline-block text-xs text-slate-400 transition-transform" style="transform:rotate(' + (collapsed ? "-90deg" : "0deg") + ')">▼</span>' +
+          '<span class="text-base font-bold text-slate-900">' + group.title + '</span>' +
+          '<span class="text-base font-normal text-slate-400">' + count + '</span>';
+
+        btn.addEventListener("click", function () {
+          groupCollapsed[group.key] = !groupCollapsed[group.key];
+          renderTasks();
+        });
+
+        td.appendChild(btn);
+        tr.appendChild(td);
+        return tr;
+      }
+
+      function renderTasks() {
+        var tbody = document.getElementById("tasks-body");
+        if (!tbody) return;
+
+        var visible = allTasks.filter(function (t) {
+          if (currentFilter) return taskMatches(t, currentFilter);
+          return true;
+        });
+
+        tbody.innerHTML = "";
+
+        if (visible.length === 0) {
+          tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="7">' +
+            (currentFilter ? "Нет задач по выбранному фильтру" : "Нет задач") +
+            '</td></tr>';
+          return;
+        }
+
+        var now = new Date();
+        var todayMidnight = startOfDay(now);
+        var tomorrowMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000);
+
+        var buckets = { overdue: [], today: [], tomorrow: [], later: [] };
+        visible.forEach(function (t) {
+          var b = dueBucket(t, todayMidnight, tomorrowMidnight);
+          buckets[b].push(t);
+          if (t._new) groupCollapsed[b] = false;
+        });
+
+        function sortByTime(a, b) {
+          var pa = parseDue(getDueDate(a)), pb = parseDue(getDueDate(b));
+          var ta = pa ? pa.date.getTime() : 0, tb = pb ? pb.date.getTime() : 0;
+          return ta - tb;
+        }
+        buckets.overdue.sort(sortByTime);
+        buckets.today.sort(sortByTime);
+        buckets.tomorrow.sort(sortByTime);
+        buckets.later.sort(sortByTime);
+
+        DUE_GROUPS.forEach(function (group) {
+          var list = buckets[group.key];
+          if (list.length === 0) return;
+          tbody.appendChild(createGroupHeader(group, list.length));
+          if (groupCollapsed[group.key]) return;
+          list.forEach(function (t) {
+            appendTaskRow(tbody, t, group.key);
+          });
+        });
+      }
+
+      function renderTags(container, tags) {
+        container.innerHTML = "";
+        tags.forEach(function (tag) {
+          var found = TAGS.filter(function (x) { return x.key === tag; })[0];
+          var span = document.createElement("span");
+          span.className = "rounded-md px-2.5 py-1 text-xs font-medium ring-1 " +
+            (found ? found.cls : "bg-slate-100 text-slate-700 ring-slate-200");
+          span.textContent = found ? found.key : tag;
+          container.appendChild(span);
+        });
+      }
+
+      function createTaskRow(t, bucket) {
+        var done = (t.status || "").indexOf("x") !== -1;
+        var tr = document.createElement("tr");
+        tr.className = "border-b border-slate-200";
+        if (bucket) tr.setAttribute("data-group-row", bucket);
+
+        var statusCell = document.createElement("td");
+        statusCell.className = "flex justify-center px-4 py-4";
+        var checkBtn = document.createElement("button");
+        checkBtn.type = "button";
+        checkBtn.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors " +
+          (done
+            ? "border-emerald-600 bg-emerald-600 text-white"
+            : "border-slate-300 bg-white text-transparent hover:border-emerald-500");
+        checkBtn.innerHTML = '<svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4 4 8-9"/></svg>';
+        checkBtn.addEventListener("click", function () {
+          toggleStatus(t, checkBtn, tr);
+        });
+        statusCell.appendChild(checkBtn);
+
+        var taskCell = document.createElement("td");
+        taskCell.className = "px-4 py-4 align-top";
+        renderTaskName(taskCell, t);
+
+        var assigneeCell = document.createElement("td");
+        assigneeCell.className = "px-4 py-4 align-top";
+        renderAssignee(assigneeCell, t);
+
+        var tagsCell = document.createElement("td");
+        tagsCell.className = "px-4 py-4 text-center align-top";
+        var tagsWrap = document.createElement("div");
+        tagsWrap.className = "flex flex-col items-center gap-1";
+
+        var tagsView = document.createElement("div");
+        tagsView.className = "tags-view flex flex-wrap justify-center gap-1";
+        if (getTaskTags(t).length > 0) tagsView.classList.add("min-h-[1.25rem]");
+        renderTags(tagsView, getTaskTags(t));
+        tagsView.querySelectorAll("span").forEach(function (span) {
+          span.className += " cursor-pointer hover:ring-slate-400";
+          span.title = "Нажмите, чтобы изменить теги";
+          span.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleTagPopup(t, span);
+          });
+        });
+        tagsWrap.appendChild(tagsView);
+
+        if (tagsView.childElementCount === 0) {
+          var tagsEditBtn = document.createElement("button");
+          tagsEditBtn.type = "button";
+          tagsEditBtn.className = "rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900";
+          tagsEditBtn.title = "Изменить теги";
+          tagsEditBtn.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+          tagsEditBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleTagPopup(t, tagsEditBtn);
+          });
+          tagsWrap.appendChild(tagsEditBtn);
+        }
+        tagsCell.appendChild(tagsWrap);
+
+        var effectiveBucket = bucket;
+        if (!effectiveBucket) {
+          var _now = new Date();
+          var _today = startOfDay(_now);
+          var _tomorrow = new Date(_today.getTime() + 24 * 60 * 60 * 1000);
+          effectiveBucket = dueBucket(t, _today, _tomorrow);
+        }
+        var dueCell = document.createElement("td");
+        dueCell.className = "px-4 py-4 text-center align-top text-[13px] text-slate-700 whitespace-nowrap";
+        renderDue(dueCell, t, effectiveBucket);
+
+        var commentCell = document.createElement("td");
+        commentCell.className = "px-4 py-4 align-top text-[13px] text-slate-700";
+        renderComment(commentCell, t);
+
+        var actionCell = document.createElement("td");
+        actionCell.className = "px-2 py-4 text-center align-top";
+        var deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 whitespace-nowrap";
+        deleteBtn.textContent = "Удалить";
+        deleteBtn.addEventListener("click", function () {
+          deleteTask(t, tr);
+        });
+        actionCell.appendChild(deleteBtn);
+
+        tr.appendChild(statusCell);
+        tr.appendChild(taskCell);
+        tr.appendChild(dueCell);
+        tr.appendChild(assigneeCell);
+        tr.appendChild(tagsCell);
+        tr.appendChild(commentCell);
+        tr.appendChild(actionCell);
+        return tr;
+      }
+
+      function renderTaskName(cell, t) {
+        cell.innerHTML = "";
+        var done = (t.status || "").indexOf("x") !== -1;
+        var view = document.createElement("div");
+        view.className = "task-title cursor-text whitespace-pre-wrap rounded-lg border border-transparent px-1 py-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm font-normal leading-snug text-slate-900" +
+          (done ? " line-through text-slate-400" : "");
+        view.textContent = t.task || "";
+        view.title = "Нажмите, чтобы изменить задачу";
+        view.addEventListener("click", function () {
+          beginTaskNameEdit(t, cell, view);
+        });
+        cell.appendChild(view);
+      }
+
+      function beginTaskNameEdit(t, cell, view) {
+        if (cell.querySelector("textarea")) return;
+
+        var textarea = document.createElement("textarea");
+        textarea.className = "block w-[calc(100%+8px)] -mx-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm font-normal leading-snug text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.rows = 1;
+        textarea.value = t.task || "";
+        cell.replaceChild(textarea, view);
+        autoGrow(textarea);
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+        var finished = false;
+        function commit(save) {
+          if (finished) return;
+          finished = true;
+          var newValue = textarea.value;
+          if (save && newValue !== (t.task || "")) {
+            updateTaskName(t, cell, newValue);
+          } else {
+            renderTaskName(cell, t);
+          }
+        }
+
+        textarea.addEventListener("input", function () { autoGrow(textarea); });
+        textarea.addEventListener("blur", function () { commit(true); });
+        textarea.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            textarea.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            commit(false);
+          }
+        });
+      }
+
+      function autoGrow(textarea) {
+        textarea.rows = 1;
+        textarea.style.height = "auto";
+        textarea.style.height = textarea.scrollHeight + "px";
+      }
+
+      async function updateTaskName(t, cell, newValue) {
+        var previous = t.task;
+        t.task = newValue;
+        renderTaskName(cell, t);
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: previous,
+              assignee: t.assignee,
+              comment: t.comment,
+              dueDate: getDueDate(t),
+              newStatus: t.status,
+              newTags: getTaskTags(t),
+              newTask: newValue
+            })
+          });
+
+          if (!res.ok) {
+            t.task = previous;
+            renderTaskName(cell, t);
+            alert("Не удалось обновить задачу");
+          }
+        } catch (err) {
+          t.task = previous;
+          renderTaskName(cell, t);
+          alert("Ошибка при обновлении задачи");
+        }
+      }
+
+      function renderAssignee(cell, t) {
+        cell.innerHTML = "";
+        var view = document.createElement("div");
+        view.className = "assignee-name cursor-text whitespace-pre-wrap rounded-lg border border-transparent px-1 py-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-sm font-normal leading-snug text-slate-900";
+        view.textContent = t.assignee || "";
+        view.title = "Нажмите, чтобы изменить ответственного";
+        view.addEventListener("click", function () {
+          beginAssigneeEdit(t, cell, view);
+        });
+        cell.appendChild(view);
+      }
+
+      function beginAssigneeEdit(t, cell, view) {
+        if (cell.querySelector("textarea")) return;
+
+        var textarea = document.createElement("textarea");
+        textarea.className = "block w-[calc(100%+8px)] -mx-1 resize-none overflow-hidden rounded-lg border border-slate-300 px-1 py-1 text-sm font-normal leading-snug text-slate-900 focus:border-slate-950 focus:outline-none";
+        textarea.rows = 1;
+        textarea.value = t.assignee || "";
+        cell.replaceChild(textarea, view);
+        autoGrow(textarea);
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+        var finished = false;
+        function commit(save) {
+          if (finished) return;
+          finished = true;
+          var newValue = textarea.value;
+          if (save && newValue !== (t.assignee || "")) {
+            updateAssignee(t, cell, newValue);
+          } else {
+            renderAssignee(cell, t);
+          }
+        }
+
+        textarea.addEventListener("input", function () { autoGrow(textarea); });
+        textarea.addEventListener("blur", function () { commit(true); });
+        textarea.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            textarea.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            commit(false);
+          }
+        });
+      }
+
+      async function updateAssignee(t, cell, newValue) {
+        var previous = t.assignee;
+        t.assignee = newValue;
+        renderAssignee(cell, t);
+        updateSummary();
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: previous,
+              comment: t.comment,
+              dueDate: getDueDate(t),
+              newStatus: t.status,
+              newTags: getTaskTags(t),
+              newAssignee: newValue
+            })
+          });
+
+          if (!res.ok) {
+            t.assignee = previous;
+            renderAssignee(cell, t);
+            updateSummary();
+            alert("Не удалось обновить ответственного");
+          }
+        } catch (err) {
+          t.assignee = previous;
+          renderAssignee(cell, t);
+          updateSummary();
+          alert("Ошибка при обновлении ответственного");
+        }
+      }
+
+      function renderStatus(checkBtn, taskEl, done) {
+        checkBtn.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors " +
+          (done
+            ? "border-emerald-600 bg-emerald-600 text-white"
+            : "border-slate-300 bg-white text-transparent hover:border-emerald-500");
+        if (taskEl) {
+          taskEl.classList.toggle("line-through", done);
+          taskEl.classList.toggle("text-slate-400", done);
+        }
+      }
+
+      async function toggleStatus(t, checkBtn, tr) {
+        var wasDone = (t.status || "").indexOf("x") !== -1;
+        var newStatus = wasDone ? "[ ]" : "[x]";
+        var taskTitleEl = tr.querySelector(".task-title");
+
+        renderStatus(checkBtn, taskTitleEl, !wasDone);
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: t.assignee,
+              comment: t.comment,
+              dueDate: getDueDate(t),
+              newStatus: newStatus,
+              newTags: getTaskTags(t)
+            })
+          });
+
+          if (res.ok) {
+            t.status = newStatus;
+          } else {
+            renderStatus(checkBtn, taskTitleEl, wasDone);
+            alert("Не удалось обновить статус");
+          }
+        } catch (err) {
+          renderStatus(checkBtn, taskTitleEl, wasDone);
+          alert("Ошибка при обновлении статуса");
+        }
+        updateSummary();
+        renderTasks();
+      }
+
+      var tagPopup = null;
+      var tagPopupTask = null;
+
+      function getTagPopup() {
+        if (tagPopup) return tagPopup;
+        tagPopup = document.createElement("div");
+        tagPopup.className = "fixed z-50 hidden w-44 rounded-lg border border-slate-200 bg-white p-2 shadow-lg";
+        tagPopup.addEventListener("click", function (e) { e.stopPropagation(); });
+        document.body.appendChild(tagPopup);
+        return tagPopup;
+      }
+
+      function toggleTagPopup(t, anchorEl) {
+        var popup = getTagPopup();
+        if (tagPopupTask === t && !popup.classList.contains("hidden")) {
+          closeTagPopup();
+          return;
+        }
+        openTagPopup(t, anchorEl);
+      }
+
+      function openTagPopup(t, anchorEl) {
+        var popup = getTagPopup();
+        tagPopupTask = t;
+        popup.innerHTML = "";
+        var current = getTaskTags(t);
+        TAGS.forEach(function (tag) {
+          var label = document.createElement("label");
+          label.className = "flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50";
+          var cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.name = "row-tag";
+          cb.value = tag.key;
+          cb.checked = current.indexOf(tag.key) !== -1;
+          cb.addEventListener("change", function () {
+            updateTags(t);
+          });
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(tag.key));
+          popup.appendChild(label);
+        });
+        popup.classList.remove("hidden");
+        var r = anchorEl.getBoundingClientRect();
+        var pw = 176;
+        var ph = 140;
+        var left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8));
+        var top = r.bottom + 4;
+        if (top + ph > window.innerHeight - 8) {
+          top = Math.max(8, r.top - ph - 4);
+        }
+        popup.style.left = left + "px";
+        popup.style.top = top + "px";
+      }
+
+      function closeTagPopup() {
+        if (tagPopup) tagPopup.classList.add("hidden");
+        tagPopupTask = null;
+      }
+
+      function syncTagPopup(t) {
+        if (!tagPopup || tagPopupTask !== t || tagPopup.classList.contains("hidden")) return;
+        var current = getTaskTags(t);
+        tagPopup.querySelectorAll('input[name="row-tag"]').forEach(function (cb) {
+          cb.checked = current.indexOf(cb.value) !== -1;
+        });
+      }
+
+      async function updateTags(t) {
+        var popup = getTagPopup();
+        var selected = [];
+        popup.querySelectorAll('input[name="row-tag"]').forEach(function (cb) {
+          if (cb.checked) selected.push(cb.value);
+        });
+
+        var previous = getTaskTags(t);
+        t.tags = selected.slice();
+        updateSummary();
+        renderTasks();
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: t.assignee,
+              comment: t.comment,
+              dueDate: getDueDate(t),
+              newStatus: t.status,
+              newTags: selected
+            })
+          });
+
+          if (!res.ok) {
+            t.tags = previous;
+            updateSummary();
+            renderTasks();
+            syncTagPopup(t);
+            alert("Не удалось обновить теги");
+          }
+        } catch (err) {
+          t.tags = previous;
+          updateSummary();
+          renderTasks();
+          syncTagPopup(t);
+          alert("Ошибка при обновлении тегов");
+        }
+      }
+
+      function renderComment(cell, t) {
+        cell.innerHTML = "";
+        var view = document.createElement("div");
+        view.className = "comment-view cursor-text whitespace-pre-wrap rounded-lg border border-transparent px-1 py-1 -mx-1 hover:bg-slate-100 min-h-[1.25rem] text-[13px] font-normal leading-snug text-slate-700";
+        view.textContent = t.comment || "";
+        view.title = (t.comment || "")
+          ? (t.comment + "\n\nНажмите, чтобы изменить комментарий")
+          : "Нажмите, чтобы изменить комментарий";
+        view.addEventListener("click", function () {
+          beginCommentEdit(t, cell, view);
+        });
+        cell.appendChild(view);
+      }
+
+      var commentModal = document.getElementById("comment-modal");
+      var commentForm = document.getElementById("comment-form");
+      var commentText = document.getElementById("comment-text");
+      var commentCancelBtn = document.getElementById("comment-cancel");
+      var commentEditTask = null;
+      var commentEditCell = null;
+
+      function openCommentModal(t, cell) {
+        commentEditTask = t;
+        commentEditCell = cell;
+        commentText.value = t.comment || "";
+        commentModal.style.display = "flex";
+        setTimeout(function () {
+          commentText.focus();
+          commentText.setSelectionRange(commentText.value.length, commentText.value.length);
+        }, 0);
+      }
+
+      function closeCommentModal() {
+        commentModal.style.display = "none";
+        commentEditTask = null;
+        commentEditCell = null;
+      }
+
+      commentCancelBtn.addEventListener("click", closeCommentModal);
+      commentModal.addEventListener("click", function (e) {
+        if (e.target === commentModal) closeCommentModal();
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && commentModal.style.display === "flex") closeCommentModal();
+      });
+      commentForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (!commentEditTask) {
+          closeCommentModal();
+          return;
+        }
+        var t = commentEditTask;
+        var cell = commentEditCell;
+        var newValue = commentText.value;
+        closeCommentModal();
+        if (newValue !== (t.comment || "")) {
+          updateComment(t, cell, newValue);
+        }
+      });
+
+      function beginCommentEdit(t, cell) {
+        openCommentModal(t, cell);
+      }
+
+      async function updateComment(t, cell, newComment) {
+        var previous = t.comment;
+        t.comment = newComment;
+        refreshCommentCell(cell, t);
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: t.assignee,
+              comment: previous,
+              dueDate: getDueDate(t),
+              newStatus: t.status,
+              newTags: getTaskTags(t),
+              newComment: newComment
+            })
+          });
+
+          if (!res.ok) {
+            t.comment = previous;
+            refreshCommentCell(cell, t);
+            alert("Не удалось обновить комментарий");
+          }
+        } catch (err) {
+          t.comment = previous;
+          refreshCommentCell(cell, t);
+          alert("Ошибка при обновлении комментария");
+        }
+      }
+
+      // Ячейка могла отсоединиться от DOM, пока был открыт попап
+      // (например, список перерисовался) — тогда перерисовываем весь список.
+      function refreshCommentCell(cell, t) {
+        if (cell && cell.isConnected) {
+          renderComment(cell, t);
+        } else {
+          renderTasks();
+        }
+      }
+
+      function toDatetimeLocalValue(raw) {
+        var p = parseDue(raw);
+        if (!p) return "";
+        var d = p.date;
+        function pad(n) { return String(n).padStart(2, "0"); }
+        return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+          "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+      }
+
+      function fromDatetimeLocalValue(value) {
+        if (!value) return "";
+        return String(value).replace("T", " ");
+      }
+
+      function renderDue(cell, t, bucket) {
+        cell.innerHTML = "";
+        var view = document.createElement("div");
+        view.className = "due-view cursor-text whitespace-nowrap rounded px-1 -mx-1 hover:bg-slate-100 text-[13px] leading-snug text-slate-700";
+        view.textContent = formatDueCell(t, bucket);
+        var tip = formatDueTooltip(t);
+        view.title = tip ? tip + "\n\nНажмите, чтобы изменить срок" : "Нажмите, чтобы изменить срок";
+        view.addEventListener("click", function () {
+          beginDueEdit(t, cell, bucket, view);
+        });
+        cell.appendChild(view);
+      }
+
+      function beginDueEdit(t, cell, bucket, view) {
+        if (cell.querySelector("input")) return;
+
+        var input = document.createElement("input");
+        input.type = "datetime-local";
+        input.className = "relative z-10 w-full min-w-[175px] rounded-lg border border-slate-300 bg-white px-1 py-1 text-[13px] font-normal text-slate-900 focus:border-slate-950 focus:outline-none";
+        input.value = toDatetimeLocalValue(getDueDate(t));
+        cell.replaceChild(input, view);
+        input.focus();
+        if (input.showPicker) {
+          try { input.showPicker(); } catch (e) { /* игнорируем */ }
+        }
+
+        var finished = false;
+        function commit(save) {
+          if (finished) return;
+          finished = true;
+          var rawValue = input.value;
+          if (!save) {
+            renderDue(cell, t, bucket);
+            return;
+          }
+          var newBackend = fromDatetimeLocalValue(rawValue);
+          if (!newBackend || newBackend === (getDueDate(t) || "")) {
+            renderDue(cell, t, bucket);
+            return;
+          }
+          updateDueDate(t, newBackend);
+        }
+
+        input.addEventListener("blur", function () { commit(true); });
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(true);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            commit(false);
+          }
+        });
+      }
+
+      async function updateDueDate(t, newDueBackend) {
+        var previous = getDueDate(t) || "";
+        t.dueDate = newDueBackend;
+        t.DueDate = newDueBackend;
+        renderTasks();
+
+        try {
+          var res = await fetch("/UpdateTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: t.status,
+              task: t.task,
+              assignee: t.assignee,
+              comment: t.comment,
+              dueDate: previous,
+              newStatus: t.status,
+              newTags: getTaskTags(t),
+              newDueDate: newDueBackend
+            })
+          });
+
+          if (!res.ok) {
+            t.dueDate = previous;
+            t.DueDate = previous;
+            renderTasks();
+            alert("Не удалось обновить срок");
+          }
+        } catch (err) {
+          t.dueDate = previous;
+          t.DueDate = previous;
+          renderTasks();
+          alert("Ошибка при обновлении срока");
+        }
+      }
+
+      async function deleteTask(t, row) {
+        if (!confirm("Удалить задачу «" + (t.task || "") + "»?")) return;
+
+        var payload = {
+          status: t.status || "",
+          task: t.task || "",
+          assignee: t.assignee || "",
+          comment: t.comment || "",
+          dueDate: getDueDate(t) || ""
+        };
+
+        try {
+          var res = await fetch("/DeleteTask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            if (row && row.parentNode) row.parentNode.removeChild(row);
+            var idx = allTasks.indexOf(t);
+            if (idx !== -1) allTasks.splice(idx, 1);
+            updateSummary();
+            renderTasks();
+          } else {
+            alert("Не удалось удалить задачу");
+          }
+        } catch (err) {
+          alert("Ошибка при удалении задачи");
+        }
+      }
+
+      function clearPlaceholder(tbody) {
+        var placeholder = tbody.querySelector(".tasks-placeholder");
+        if (placeholder) placeholder.remove();
+      }
+
+      var finishDayBtn = document.getElementById("finish-day-btn");
+      if (finishDayBtn) {
+        finishDayBtn.addEventListener("click", async function () {
+          var doneCount = allTasks.filter(isDone).length;
+          if (doneCount === 0) {
+            alert("Нет выполненных задач для архивации");
+            return;
+          }
+          if (!confirm("Хорошая работа!\nЗавершить день? Будет архивировано выполненных задач: " + doneCount + ".")) return;
+          finishDayBtn.disabled = true;
+          try {
+            var res = await fetch("/ArchiveCompleted", { method: "POST" });
+            if (res.ok) {
+              await window.loadTasks();
+            } else {
+              alert("Не удалось завершить день");
+            }
+          } catch (err) {
+            alert("Ошибка при завершении дня");
+          } finally {
+            finishDayBtn.disabled = false;
+          }
+        });
+      }
+
+      window.appendTask = function (t) {
+        if (!t) return;
+        if (allTasks.indexOf(t) === -1) allTasks.push(t);
+        t._new = true;
+        updateSummary();
+        renderTasks();
+      };
+
+      window.loadTasks = async function () {
+        var tbody = document.getElementById("tasks-body");
+        if (!tbody) return;
+
+        try {
+          var res = await fetch("/GetTasks");
+          if (!res.ok) return;
+          var tasks = await res.json();
+          if (!Array.isArray(tasks)) return;
+
+          allTasks = tasks.slice();
+          updateSummary();
+          renderTasks();
+        } catch (e) {
+          // оставляем заглушку при ошибке
+        }
+      };
+
+      (function init() {
+        function start() { window.loadTasks(); }
+
+        try {
+          fetch("/Config")
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (cfg) {
+              if (cfg && typeof cfg.defaultAssignee === "string") defaultAssignee = cfg.defaultAssignee;
+              start();
+            })
+            .catch(start);
+        } catch (e) {
+          start();
+        }
+      })();
+
+      document.addEventListener("click", function (e) {
+        if (tagPopup && !tagPopup.classList.contains("hidden") && !tagPopup.contains(e.target)) {
+          closeTagPopup();
+        }
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") closeTagPopup();
+      });
+      window.addEventListener("resize", closeTagPopup);
+      window.addEventListener("scroll", closeTagPopup, true);
+    })();
+
+    (function () {
+      var log = document.getElementById("chat-log");
+      var form = document.getElementById("chat-form");
+      var input = document.getElementById("chat-input");
+      var sendBtn = document.getElementById("chat-send");
+
+      var replyAudioCtx = null;
+      function ensureReplyAudio() {
+        try {
+          var Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) return null;
+          if (!replyAudioCtx) replyAudioCtx = new Ctx();
+          if (replyAudioCtx.state === "suspended") replyAudioCtx.resume();
+          return replyAudioCtx;
+        } catch (e) { return null; }
+      }
+
+      // Короткий системный "динь" через Web Audio — без внешних файлов.
+      function playReplySound() {
+        var ctx = ensureReplyAudio();
+        if (!ctx) return;
+        try {
+          var t0 = ctx.currentTime;
+          [[880, 0], [1318.5, 0.12]].forEach(function (pair) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(pair[0], t0 + pair[1]);
+            gain.gain.setValueAtTime(0.0001, t0 + pair[1]);
+            gain.gain.exponentialRampToValueAtTime(0.25, t0 + pair[1] + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t0 + pair[1] + 0.14);
+            osc.start(t0 + pair[1]);
+            osc.stop(t0 + pair[1] + 0.16);
+          });
+        } catch (e) { /* звук не критичен */ }
+      }
+
+      function autoGrowChat() {
+        input.rows = 1;
+        input.style.height = "auto";
+        input.style.overflowY = "hidden";
+        input.style.height = input.scrollHeight + "px";
+      }
+
+      input.addEventListener("input", autoGrowChat);
+      autoGrowChat();
+
+      input.addEventListener("keydown", function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          e.preventDefault();
+          form.requestSubmit();
+        }
+      });
+
+      function escapeHtml(value) {
+        var div = document.createElement("div");
+        div.textContent = value == null ? "" : String(value);
+        return div.innerHTML;
+      }
+
+      function appendBubble(role, text) {
+        if (log.querySelector(".text-slate-400")) {
+          log.innerHTML = "";
+        }
+
+        var wrap = document.createElement("div");
+        wrap.className = "flex " + (role === "user" ? "justify-end" : "justify-start");
+
+        var bubble = document.createElement("div");
+        bubble.className = "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm " +
+          (role === "user"
+            ? "bg-emerald-50 text-slate-900"
+            : "bg-slate-100 text-slate-900");
+        bubble.textContent = text;
+
+        wrap.appendChild(bubble);
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+
+        var message = input.value.trim();
+        if (!message) return;
+
+        appendBubble("user", message);
+        input.value = "";
+        autoGrowChat();
+        sendBtn.disabled = true;
+        ensureReplyAudio();
+        appendBubble("assistant", "Печатает…");
+
+        try {
+          var res = await fetch("/Chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: message })
+          });
+
+          var bubbles = log.querySelectorAll(".bg-slate-100");
+          var last = bubbles[bubbles.length - 1];
+          if (res.ok) {
+            var data = await res.json();
+            last.textContent = data.answer || "(пустой ответ)";
+            playReplySound();
+
+            if (Array.isArray(data.addedTasks) && data.addedTasks.length > 0 && window.appendTask) {
+              data.addedTasks.forEach(function (t) {
+                window.appendTask(t);
+              });
+            }
+          } else {
+            last.textContent = "Ошибка при получении ответа";
+          }
+          log.scrollTop = log.scrollHeight;
+        } catch (err) {
+          var bubbles = log.querySelectorAll(".bg-slate-100");
+          var last = bubbles[bubbles.length - 1];
+          last.textContent = "Ошибка сети";
+        } finally {
+          sendBtn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
