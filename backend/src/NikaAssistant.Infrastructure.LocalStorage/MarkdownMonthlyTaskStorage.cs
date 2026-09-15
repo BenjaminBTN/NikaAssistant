@@ -12,7 +12,7 @@ public sealed class MarkdownMonthlyTaskStorage : IMonthlyTaskStorage
         "NikaAssistant", "Tasks", "Monthly", "monthly-tasks.md");
     private static readonly string DefaultArchivePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "NikaAssistant", "Tasks", "Archive", "archive-tasks.md");
+        "NikaAssistant", "Tasks", "Monthly", "archive-monthly-tasks.md");
     private static readonly object Sync = new();
 
     // Актуальный порядок столбцов: Статус | Задача | Срок | Ответственный | Теги | Комментарий
@@ -26,7 +26,9 @@ public sealed class MarkdownMonthlyTaskStorage : IMonthlyTaskStorage
     public MarkdownMonthlyTaskStorage(IConfiguration configuration)
     {
         _filePath = ResolvePath(configuration["Storage:MonthlyTasksPath"], DefaultFilePath);
-        _archivePath = ResolvePath(configuration["Storage:ArchivePath"], DefaultArchivePath);
+        _archivePath = ResolvePath(
+            configuration["Storage:MonthlyArchivePath"] ?? configuration["Storage:ArchivePath"],
+            DefaultArchivePath);
         _defaultAssignee = configuration["Storage:DefaultAssignee"];
     }
 
@@ -558,7 +560,7 @@ public sealed class MarkdownMonthlyTaskStorage : IMonthlyTaskStorage
         if (!File.Exists(_archivePath))
         {
             var header =
-                "# Архив задач" + Environment.NewLine + Environment.NewLine +
+                "# Архив ежемесячных задач" + Environment.NewLine + Environment.NewLine +
                 HeaderRow + Environment.NewLine +
                 SeparatorRow + Environment.NewLine;
 

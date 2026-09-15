@@ -12,7 +12,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         "NikaAssistant", "Tasks", "OneTime", "one-time-tasks.md");
     private static readonly string DefaultArchivePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "NikaAssistant", "Tasks", "Archive", "archive-tasks.md");
+        "NikaAssistant", "Tasks", "OneTime", "archive-one-time-tasks.md");
     private static readonly object Sync = new();
 
     // Актуальный порядок столбцов: Статус | Задача | Срок | Ответственный | Теги | Комментарий
@@ -26,7 +26,9 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
     public MarkdownOneTimeTaskStorage(IConfiguration configuration)
     {
         _filePath = ResolvePath(configuration["Storage:OneTimeTasksPath"], DefaultFilePath);
-        _archivePath = ResolvePath(configuration["Storage:ArchivePath"], DefaultArchivePath);
+        _archivePath = ResolvePath(
+            configuration["Storage:OneTimeArchivePath"] ?? configuration["Storage:ArchivePath"],
+            DefaultArchivePath);
         _defaultAssignee = configuration["Storage:DefaultAssignee"];
     }
 
@@ -560,7 +562,7 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
         if (!File.Exists(_archivePath))
         {
             var header =
-                "# Архив задач" + Environment.NewLine + Environment.NewLine +
+                "# Архив разовых задач" + Environment.NewLine + Environment.NewLine +
                 HeaderRow + Environment.NewLine +
                 SeparatorRow + Environment.NewLine;
 
