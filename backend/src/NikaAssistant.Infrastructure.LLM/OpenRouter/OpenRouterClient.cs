@@ -42,7 +42,7 @@ public sealed class OpenRouterClient : ILlmClient
                 "OpenRouter:ApiKey не задан. Укажите ключ в appsettings.Local.json, appsettings.json (поле OpenRouter:ApiKey) или env-переменной OpenRouter__ApiKey / OPENROUTER_API_KEY.",
                 Array.Empty<LlmToolCall>(),
                 IsError: true,
-                ErrorKind: LlmErrorKind.ProviderError);
+                ErrorKind: LlmErrorKind.MissingApiKey);
         }
 
         var model = string.IsNullOrWhiteSpace(snapshot.Model) ? "openai/gpt-4o" : snapshot.Model;

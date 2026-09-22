@@ -20,6 +20,11 @@ var builder = WebApplication.CreateBuilder(args);
 // Сюда можно положить OpenRouter:ApiKey и переопределить Model/FallbackModels.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
+// Запуск exe (особенно из папки publish) сразу прописывает его в автозапуск:
+// Windows — реестр HKCU\Run, Linux — XDG Autostart, macOS — LaunchAgent.
+// Отключение: "Autostart": { "Enabled": false } или флаг --no-autostart.
+NikaAssistant.Presentation.Autostart.EnsureRegistered(builder.Configuration, args);
+
 var logDirectory = ResolveLogDirectory(builder.Configuration);
 var retainedDays = builder.Configuration.GetValue<int?>("Logging:File:RetainedDays") is { } days and > 0 ? days : 30;
 Directory.CreateDirectory(logDirectory);
@@ -204,6 +209,11 @@ app.MapPost("/Chat", async (ChatRequest request, ChatService chatService) =>
     var answer = await chatService.AskAsync(request.Message);
     return Results.Ok(new { answer = answer.Answer, addedTasks = answer.AddedTasks });
 });
+
+// Всплывающее окно «Ваш ассистент запущен» после старта сервера (в фоне, старт не блокирует).
+// Отключение: "StartupPopup": { "Enabled": false } или флаг --no-popup.
+app.Lifetime.ApplicationStarted.Register(() =>
+    NikaAssistant.Presentation.StartupNotifier.ShowStarted(args, app.Urls, builder.Configuration));
 
 app.Run();
 

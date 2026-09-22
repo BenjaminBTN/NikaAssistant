@@ -275,6 +275,8 @@ public sealed class ChatService
 
     private static string ProviderErrorMessage(LlmResponse response) => response.ErrorKind switch
     {
+        LlmErrorKind.MissingApiKey =>
+            "Чат не настроен: не задан OpenRouter:ApiKey. Вставьте ключ в файл appsettings.Local.json рядом с exe (секция OpenRouter → ApiKey) или задайте переменной окружения OPENROUTER_API_KEY. Перезапуск не нужен — ключ подхватится со следующего сообщения.",
         LlmErrorKind.RateLimited =>
             "Слишком много запросов к модели (ошибка 429). Дождитесь сброса лимита и попробуйте снова.",
         LlmErrorKind.InsufficientCredits =>
@@ -284,6 +286,7 @@ public sealed class ChatService
 
     private static string ProviderErrorShort(LlmResponse response) => response.ErrorKind switch
     {
+        LlmErrorKind.MissingApiKey => "не задан OpenRouter:ApiKey",
         LlmErrorKind.RateLimited => "превышен лимит запросов к модели (429)",
         LlmErrorKind.InsufficientCredits => "закончился баланс аккаунта (402)",
         _ => "временный сбой провайдера",

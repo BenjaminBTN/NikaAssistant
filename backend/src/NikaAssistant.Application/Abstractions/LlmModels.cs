@@ -13,6 +13,7 @@ public enum LlmErrorKind
     None,
     RateLimited,
     InsufficientCredits,
+    MissingApiKey,
     ProviderError
 }
 
