@@ -18,19 +18,7 @@ public static class StartupNotifier
     {
         try
         {
-            if (args.Any(a => string.Equals(a, OptOutArg, StringComparison.OrdinalIgnoreCase)))
-            {
-                return;
-            }
-
-            if (configuration.GetValue<bool?>("StartupPopup:Enabled") is false)
-            {
-                return;
-            }
-
-            // В Development (dotnet run) окно не показываем, чтобы не мешать отладке.
-            // Publish exe показывает всегда.
-            if (Autostart.IsDevelopmentBuild(configuration))
+            if (!ShouldShowPopup(args, configuration))
             {
                 return;
             }
@@ -42,6 +30,32 @@ public static class StartupNotifier
         {
             Console.WriteLine($"[StartupPopup] {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Окно показываем только при ручном запуске. Старты из автозапуска
+    /// (маркер --from-autostart в командной строке) — молча, без окна.
+    /// </summary>
+    public static bool ShouldShowPopup(string[] args, IConfiguration configuration)
+    {
+        if (args.Any(a => string.Equals(a, OptOutArg, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        if (args.Any(a => string.Equals(a, Autostart.FromAutostartArg, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        if (configuration.GetValue<bool?>("StartupPopup:Enabled") is false)
+        {
+            return false;
+        }
+
+        // В Development (dotnet run) окно не показываем, чтобы не мешать отладке.
+        // Publish exe показывает всегда (если это ручной запуск).
+        return !Autostart.IsDevelopmentBuild(configuration);
     }
 
     public static string BuildText(IEnumerable<string> urls)

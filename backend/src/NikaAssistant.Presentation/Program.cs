@@ -22,6 +22,7 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 
 // Запуск exe (особенно из папки publish) сразу прописывает его в автозапуск:
 // Windows — реестр HKCU\Run, Linux — XDG Autostart, macOS — LaunchAgent.
+// В запись дописывается --from-autostart, чтобы старт из автозапуска опознавался (без popup).
 // Отключение: "Autostart": { "Enabled": false } или флаг --no-autostart.
 NikaAssistant.Presentation.Autostart.EnsureRegistered(builder.Configuration, args);
 

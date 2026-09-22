@@ -19,6 +19,13 @@ public static class Autostart
 {
     public const string OptOutArg = "--no-autostart";
 
+    /// <summary>
+    /// Маркер запуска из автозапуска. Всегда дописывается в хранимую запись,
+    /// чтобы следующий старт (например, после перезагрузки) опознался как
+    /// автоматический — тогда StartupNotifier не показывает окно.
+    /// </summary>
+    public const string FromAutostartArg = "--from-autostart";
+
     public static void EnsureRegistered(IConfiguration configuration, string[] args, string appName = "NikaAssistant")
     {
         try
@@ -96,6 +103,20 @@ public static class Autostart
     public static string[] GetForwardedArgs(string[] args) =>
         args.Where(a => !string.Equals(a, OptOutArg, StringComparison.OrdinalIgnoreCase)).ToArray();
 
+    /// <summary>
+    /// Аргументы для записи в автозапуск: проброшенные + маркер <see cref="FromAutostartArg"/>.
+    /// </summary>
+    public static string[] GetStoredArgs(string[] args)
+    {
+        var forwarded = GetForwardedArgs(args);
+        if (forwarded.Any(a => string.Equals(a, FromAutostartArg, StringComparison.OrdinalIgnoreCase)))
+        {
+            return forwarded;
+        }
+
+        return [.. forwarded, FromAutostartArg];
+    }
+
     public static string Quote(string value) =>
         value.Contains(' ') || value.Contains('"') ? $"\"{value.Replace("\"", "\"\"")}\"" : value;
 
@@ -108,7 +129,8 @@ public static class Autostart
 
     internal static LaunchTarget? ResolveLaunchTarget(string[] args)
     {
-        var forwarded = GetForwardedArgs(args);
+        // В хранимую запись всегда входит маркер --from-autostart.
+        var forwarded = GetStoredArgs(args);
         var baseDir = AppContext.BaseDirectory;
         var processPath = Environment.ProcessPath;
         var entryLocation = GetEntryAssemblyLocation();
