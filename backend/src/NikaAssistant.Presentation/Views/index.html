@@ -55,6 +55,20 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
+    /* Чат с ассистентом: обычное блочное окно в потоке страницы (при скролле
+       уезжает вместе с остальным содержимым, без position:fixed/sticky),
+       а высота лога сообщений подбирается JS под высоту экрана так, чтобы
+       низ окна чата был с небольшим отступом от нижнего края экрана. */
+    #chat-card {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    #chat-log {
+      /* Стартовое значение до пересчёта JS; затем выставляется точная высота. */
+      height: 300px;
+      min-height: 300px;
+    }
     /* Мобильная адаптация таблицы задач: строки становятся карточками друг под другом,
        чтобы не было горизонтальной прокрутки. */
     @media (max-width: 767px) {
@@ -193,11 +207,11 @@
       </div>
 
       <aside class="w-full min-w-0 space-y-6">
-        <div class="rounded-lg border border-slate-200 bg-white">
-          <div class="border-b border-slate-200 px-5 py-4">
+        <div id="chat-card" class="rounded-lg border border-slate-200 bg-white">
+          <div class="chat-header border-b border-slate-200 px-5 py-4">
             <h2 class="text-lg font-bold">Чат с ассистентом</h2>
           </div>
-          <div id="chat-log" class="h-[300px] space-y-3 overflow-y-auto px-5 py-4">
+          <div id="chat-log" class="space-y-3 overflow-y-auto px-5 py-4">
             <div class="text-sm text-slate-400">История сообщений пуста.</div>
           </div>
           <form id="chat-form" class="flex min-w-0 items-end gap-3 border-t border-slate-200 px-5 py-4">
@@ -1819,6 +1833,63 @@
       window.addEventListener("scroll", closeTagPopup, true);
     })();
 
+    // Подгон высоты чата под высоту экрана: окно чата остаётся обычным блоком
+    // в потоке страницы (при скролле уезжает вместе с остальным содержимым),
+    // но высота лога подбирается так, чтобы при положении страницы вверху
+    // низ окна чата был с небольшим отступом от нижнего края экрана.
+    (function () {
+      var BOTTOM_GAP = 24; // небольшой отступ от нижнего края экрана, px
+      var MIN_LOG_HEIGHT = 300; // минимальная высота лога, px
+      var MOBILE_BREAKPOINT = 1280; // xl: до него aside идёт отдельной строкой под таблицей
+
+      function fitChatHeight() {
+        var card = document.getElementById("chat-card");
+        var log = document.getElementById("chat-log");
+        if (!card || !log) return;
+        var header = card.querySelector(".chat-header");
+        var form = document.getElementById("chat-form");
+
+        // На узких экранах чат заведомо ниже первого экрана (под таблицей) —
+        // привязываться к низу экрана не нужно, даём компактную высоту.
+        if (window.innerWidth < MOBILE_BREAKPOINT) {
+          log.style.height = "";
+          log.style.minHeight = MIN_LOG_HEIGHT + "px";
+          log.style.maxHeight = "70vh";
+          return;
+        }
+        log.style.maxHeight = "";
+
+        // Верх карточки относительно документа — высота не зависит от текущего
+        // скролла и не меняется при прокрутке страницы.
+        var rect = card.getBoundingClientRect();
+        var cardTopDoc = rect.top + (window.scrollY || window.pageYOffset || 0);
+        var headerH = header ? header.offsetHeight : 0;
+        var formH = form ? form.offsetHeight : 0;
+        // +2px — запас на верхнюю/нижнюю границы карточки.
+        var logH = window.innerHeight - cardTopDoc - BOTTOM_GAP - headerH - formH - 2;
+        if (logH < MIN_LOG_HEIGHT) logH = MIN_LOG_HEIGHT;
+
+        log.style.height = Math.round(logH) + "px";
+        log.style.minHeight = MIN_LOG_HEIGHT + "px";
+      }
+
+      window.fitChatHeight = fitChatHeight;
+      window.addEventListener("load", function () {
+        // Два кадра + небольшая задержка: ждём Tailwind CDN и отрисовку шапки/карточек.
+        requestAnimationFrame(function () {
+          requestAnimationFrame(fitChatHeight);
+        });
+        setTimeout(fitChatHeight, 300);
+      });
+      window.addEventListener("resize", fitChatHeight);
+      // Первый расчёт сразу для стартового рендера (до события load).
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", fitChatHeight);
+      } else {
+        fitChatHeight();
+      }
+    })();
+
     (function () {
       var log = document.getElementById("chat-log");
       var form = document.getElementById("chat-form");
@@ -1862,7 +1933,17 @@
         input.rows = 1;
         input.style.height = "auto";
         input.style.overflowY = "hidden";
-        input.style.height = input.scrollHeight + "px";
+        // Ограничиваем рост поля ввода, чтобы низ окна чата оставался
+        // с отступом от края экрана; дальше текст скроллится внутри поля.
+        var maxInputH = 160;
+        var h = input.scrollHeight;
+        if (h > maxInputH) {
+          h = maxInputH;
+          input.style.overflowY = "auto";
+        }
+        input.style.height = h + "px";
+        // Компенсируем высоту лога, чтобы низ карточки чата оставался на месте.
+        if (typeof window.fitChatHeight === "function") window.fitChatHeight();
       }
 
       input.addEventListener("input", autoGrowChat);
@@ -1947,6 +2028,6 @@
       });
     })();
   </script>
-  <footer class="fixed bottom-3 right-4 text-xs text-slate-400">v.1.1.0</footer>
+  <footer class="fixed bottom-1 right-4 text-xs text-slate-400">v.1.1.0</footer>
 </body>
 </html>
