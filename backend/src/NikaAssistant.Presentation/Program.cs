@@ -4,8 +4,7 @@ using NikaAssistant.Application.Chat;
 using NikaAssistant.Application.CreateTask;
 using NikaAssistant.Application.DeleteTask;
 using NikaAssistant.Application.GetTask;
-using NikaAssistant.Application.Monthly;
-using NikaAssistant.Application.Yearly;
+using NikaAssistant.Application.Recurring;
 using NikaAssistant.Application.UpdateTask;
 using NikaAssistant.Contracts;
 using NikaAssistant.Domain;
@@ -58,18 +57,14 @@ builder.Services.AddSession(options =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenRouterClient>());
 builder.Services.AddSingleton<IOneTimeTaskStorage, MarkdownOneTimeTaskStorage>();
-builder.Services.AddSingleton<IMonthlyTaskStorage, MarkdownMonthlyTaskStorage>();
-builder.Services.AddSingleton<IYearlyTaskStorage, MarkdownYearlyTaskStorage>();
-builder.Services.AddScoped<MonthlyRolloverService>();
-builder.Services.AddScoped<YearlyRolloverService>();
+builder.Services.AddSingleton<IRecurringTaskStorage, MarkdownRecurringTaskStorage>();
+builder.Services.AddScoped<RecurringRolloverService>();
 builder.Services.AddScoped<AddTaskHandler>();
 builder.Services.AddScoped<GetTaskHandler>();
 builder.Services.AddScoped<DeleteTaskHandler>();
-builder.Services.AddScoped<DeleteMonthlyTaskHandler>();
-builder.Services.AddScoped<DeleteYearlyTaskHandler>();
+builder.Services.AddScoped<DeleteRecurringTaskHandler>();
 builder.Services.AddScoped<UpdateTaskHandler>();
-builder.Services.AddScoped<UpdateMonthlyTaskHandler>();
-builder.Services.AddScoped<UpdateYearlyTaskHandler>();
+builder.Services.AddScoped<UpdateRecurringTaskHandler>();
 builder.Services.AddScoped<ChatService>();
 
 var app = builder.Build();
@@ -90,26 +85,19 @@ app.MapGet("/", (HttpContext http) =>
     return Results.File(filePath, "text/html");
 });
 
-app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler, IOneTimeTaskStorage storage, IMonthlyTaskStorage monthlyStorage, IYearlyTaskStorage yearlyStorage, MonthlyRolloverService rollover, YearlyRolloverService yearlyRollover) =>
+app.MapPost("/AddTask", async (AddTaskRequest request, AddTaskHandler handler, IOneTimeTaskStorage storage, IRecurringTaskStorage recurringStorage, RecurringRolloverService rollover) =>
 {
     await handler.AddTaskAsync(request);
-    var isMonthly = handler.IsMonthly(request);
-    var isYearly = handler.IsYearly(request);
-    // Создание ежемесячной/ежегодной с датой сегодня/завтра сразу расщепляем в one-time.
-    if (isMonthly)
+    var isRecurring = handler.IsRecurring(request);
+    // Создание периодической с датой сегодня/завтра сразу расщепляем в one-time.
+    if (isRecurring)
     {
         await rollover.RolloverDueAsync();
     }
-    if (isYearly)
-    {
-        await yearlyRollover.RolloverDueAsync();
-    }
-    var assignee = isMonthly ? monthlyStorage.ResolveAssignee(request.Assignee)
-        : isYearly ? yearlyStorage.ResolveAssignee(request.Assignee)
+    var assignee = isRecurring ? recurringStorage.ResolveAssignee(request.Assignee)
         : storage.ResolveAssignee(request.Assignee);
     var dueDate = TaskNormalizer.NormalizeDueDate(request.DueDate);
-    var tags = isMonthly ? MonthlyTaskRules.EnsureMonthlyTag(request.Tags)
-        : isYearly ? YearlyTaskRules.EnsureYearlyTag(request.Tags)
+    var tags = isRecurring ? RecurringTaskRules.MigrateLegacyTags(request.Tags)
         : (request.Tags ?? new List<string>());
     var created = new OneTimeTask("[ ]", TaskNormalizer.NormalizeTaskTitle(request.Task), assignee, request.Comment ?? "", tags, dueDate);
     return Results.Ok(created);
@@ -121,15 +109,22 @@ app.MapGet("/GetTasks", async (GetTaskHandler handler) =>
     return Results.Ok(tasks);
 });
 
+app.MapGet("/GetRecurringTasks", async (GetTaskHandler handler) =>
+{
+    var tasks = await handler.GetRecurringAll();
+    return Results.Ok(tasks);
+});
+
+// Устаревшие алиасы (до объединения): отдают тот же единый список периодических задач.
 app.MapGet("/GetMonthlyTasks", async (GetTaskHandler handler) =>
 {
-    var tasks = await handler.GetMonthlyAll();
+    var tasks = await handler.GetRecurringAll();
     return Results.Ok(tasks);
 });
 
 app.MapGet("/GetYearlyTasks", async (GetTaskHandler handler) =>
 {
-    var tasks = await handler.GetYearlyAll();
+    var tasks = await handler.GetRecurringAll();
     return Results.Ok(tasks);
 });
 
@@ -158,23 +153,29 @@ app.MapPost("/DeleteTask", async (DeleteTaskRequest request, DeleteTaskHandler h
     return Results.Ok();
 });
 
-app.MapPost("/DeleteMonthlyTask", async (DeleteTaskRequest request, DeleteMonthlyTaskHandler handler) =>
+app.MapPost("/DeleteRecurringTask", async (DeleteTaskRequest request, DeleteRecurringTaskHandler handler) =>
 {
     await handler.DeleteTaskAsync(request);
     return Results.Ok();
 });
 
-app.MapPost("/DeleteYearlyTask", async (DeleteTaskRequest request, DeleteYearlyTaskHandler handler) =>
+// Устаревшие алиасы (до объединения).
+app.MapPost("/DeleteMonthlyTask", async (DeleteTaskRequest request, DeleteRecurringTaskHandler handler) =>
 {
     await handler.DeleteTaskAsync(request);
     return Results.Ok();
 });
 
-app.MapPost("/ArchiveCompleted", async (IOneTimeTaskStorage storage, IMonthlyTaskStorage monthlyStorage, IYearlyTaskStorage yearlyStorage) =>
+app.MapPost("/DeleteYearlyTask", async (DeleteTaskRequest request, DeleteRecurringTaskHandler handler) =>
+{
+    await handler.DeleteTaskAsync(request);
+    return Results.Ok();
+});
+
+app.MapPost("/ArchiveCompleted", async (IOneTimeTaskStorage storage, IRecurringTaskStorage recurringStorage) =>
 {
     var archived = await storage.ArchiveCompletedAsync();
-    archived += await monthlyStorage.ArchiveCompletedAsync();
-    archived += await yearlyStorage.ArchiveCompletedAsync();
+    archived += await recurringStorage.ArchiveCompletedAsync();
     return Results.Ok(new { archived });
 });
 
@@ -184,19 +185,28 @@ app.MapPost("/UpdateTask", async (UpdateTaskRequest request, UpdateTaskHandler h
     return Results.Ok();
 });
 
-app.MapPost("/UpdateMonthlyTask", async (UpdateTaskRequest request, UpdateMonthlyTaskHandler handler, MonthlyRolloverService rollover) =>
+app.MapPost("/UpdateRecurringTask", async (UpdateTaskRequest request, UpdateRecurringTaskHandler handler, RecurringRolloverService rollover) =>
 {
     await handler.UpdateTaskAsync(request);
-    // Ручная смена даты ежемесячной на сегодня/завтра сразу расщепляем в one-time.
+    // Ручная смена даты периодической на сегодня/завтра сразу расщепляем в one-time.
     await rollover.RolloverDueAsync();
     return Results.Ok();
 });
 
-app.MapPost("/UpdateYearlyTask", async (UpdateTaskRequest request, UpdateYearlyTaskHandler handler, YearlyRolloverService yearlyRollover) =>
+// Устаревшие алиасы (до объединения).
+app.MapPost("/UpdateMonthlyTask", async (UpdateTaskRequest request, UpdateRecurringTaskHandler handler, RecurringRolloverService rollover) =>
 {
     await handler.UpdateTaskAsync(request);
-    // Ручная смена даты ежегодной на сегодня/завтра сразу расщепляем в one-time.
-    await yearlyRollover.RolloverDueAsync();
+    // Ручная смена даты периодической на сегодня/завтра сразу расщепляем в one-time.
+    await rollover.RolloverDueAsync();
+    return Results.Ok();
+});
+
+app.MapPost("/UpdateYearlyTask", async (UpdateTaskRequest request, UpdateRecurringTaskHandler handler, RecurringRolloverService rollover) =>
+{
+    await handler.UpdateTaskAsync(request);
+    // Ручная смена даты периодической на сегодня/завтра сразу расщепляем в one-time.
+    await rollover.RolloverDueAsync();
     return Results.Ok();
 });
 

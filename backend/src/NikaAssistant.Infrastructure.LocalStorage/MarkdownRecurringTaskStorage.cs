@@ -5,14 +5,20 @@ using NikaAssistant.Domain;
 
 namespace NikaAssistant.Infrastructure.LocalStorage;
 
-public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
+public sealed class MarkdownRecurringTaskStorage : IRecurringTaskStorage
 {
     private static readonly string DefaultFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "NikaAssistant", "Tasks", "Yearly", "yearly-tasks.md");
+        "NikaAssistant", "Tasks", "Recurring", "recurring-tasks.md");
     private static readonly string DefaultArchivePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "NikaAssistant", "Tasks", "Yearly", "archive-yearly-tasks.md");
+        "NikaAssistant", "Tasks", "Recurring", "archive-recurring-tasks.md");
+    private static readonly string DefaultLegacyMonthlyPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "NikaAssistant", "Tasks", "Monthly", "monthly-tasks.md");
+    private static readonly string DefaultLegacyYearlyPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "NikaAssistant", "Tasks", "Yearly", "yearly-tasks.md");
     private static readonly object Sync = new();
 
     // Актуальный порядок столбцов: Статус | Задача | Срок | Ответственный | Теги | Комментарий
@@ -21,14 +27,19 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
 
     private readonly string _filePath;
     private readonly string _archivePath;
+    private readonly string? _legacyMonthlyPath;
+    private readonly string? _legacyYearlyPath;
     private readonly string? _defaultAssignee;
+    private bool _legacyImportAttempted;
 
-    public MarkdownYearlyTaskStorage(IConfiguration configuration)
+    public MarkdownRecurringTaskStorage(IConfiguration configuration)
     {
-        _filePath = ResolvePath(configuration["Storage:YearlyTasksPath"], DefaultFilePath);
+        _filePath = ResolvePath(configuration["Storage:RecurringTasksPath"], DefaultFilePath);
         _archivePath = ResolvePath(
-            configuration["Storage:YearlyArchivePath"] ?? configuration["Storage:ArchivePath"],
+            configuration["Storage:RecurringArchivePath"] ?? configuration["Storage:ArchivePath"],
             DefaultArchivePath);
+        _legacyMonthlyPath = ResolvePath(configuration["Storage:MonthlyTasksPath"], DefaultLegacyMonthlyPath);
+        _legacyYearlyPath = ResolvePath(configuration["Storage:YearlyTasksPath"], DefaultLegacyYearlyPath);
         _defaultAssignee = configuration["Storage:DefaultAssignee"];
     }
 
@@ -53,7 +64,7 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
         request = request with
         {
             Task = TaskNormalizer.NormalizeTaskTitle(request.Task),
-            Tags = YearlyTaskRules.EnsureYearlyTag(request.Tags),
+            Tags = RecurringTaskRules.MigrateLegacyTags(request.Tags),
         };
         var assignee = ResolveAssignee(request.Assignee);
         var tags = string.Join(", ", request.Tags!.Select(Escape));
@@ -62,6 +73,7 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
 
         lock (Sync)
         {
+            EnsureMigratedLocked();
             MigrateSchema();
 
             var directory = Path.GetDirectoryName(_filePath);
@@ -73,7 +85,7 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
             if (!File.Exists(_filePath))
             {
                 var header =
-                    "# Ежегодные задачи" + Environment.NewLine + Environment.NewLine +
+                    "# Периодические задачи" + Environment.NewLine + Environment.NewLine +
                     HeaderRow + Environment.NewLine +
                     SeparatorRow + Environment.NewLine;
 
@@ -93,7 +105,12 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
         {
             if (!File.Exists(_filePath))
             {
-                return Task.CompletedTask;
+                // Файла ещё нет — возможно, данные лежат в legacy-файлах: импортируем и пробуем снова.
+                EnsureMigratedLocked();
+                if (!File.Exists(_filePath))
+                {
+                    return Task.CompletedTask;
+                }
             }
 
             MigrateSchema();
@@ -123,7 +140,11 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
         {
             if (!File.Exists(_filePath))
             {
-                return Task.FromResult(0);
+                EnsureMigratedLocked();
+                if (!File.Exists(_filePath))
+                {
+                    return Task.FromResult(0);
+                }
             }
 
             MigrateSchema();
@@ -194,14 +215,9 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
             var requestedTags = request.NewTags == null
                 ? currentTags
                 : request.NewTags;
-            // Тег "Ежегодно" нельзя снять через редактирование.
+            // Тег периода нельзя снять/изменить через редактирование — политика в RecurringTaskRules.
             var newTags = string.Join(", ",
-                YearlyTaskRules.ApplyEditTagPolicy(currentTags, requestedTags).Select(Escape));
-            if (!YearlyTaskRules.HasYearlyTag(newTags.Split(',', StringSplitOptions.TrimEntries)))
-            {
-                newTags = string.Join(", ", YearlyTaskRules.EnsureYearlyTag(
-                    newTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).Select(Escape));
-            }
+                RecurringTaskRules.ApplyEditTagPolicy(currentTags, requestedTags).Select(Escape));
 
             var newTask = request.NewTask ?? parsed.Task;
             var newAssignee = request.NewAssignee ?? parsed.Assignee;
@@ -223,7 +239,15 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
 
         if (!File.Exists(_filePath))
         {
-            return Task.FromResult<IReadOnlyList<OneTimeTask>>(tasks);
+            lock (Sync)
+            {
+                EnsureMigratedLocked();
+            }
+
+            if (!File.Exists(_filePath))
+            {
+                return Task.FromResult<IReadOnlyList<OneTimeTask>>(tasks);
+            }
         }
 
         lock (Sync)
@@ -294,16 +318,100 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
                 continue;
             }
 
-            // Ежегодные задачи всегда с тегом "Ежегодно".
-            if (!YearlyTaskRules.HasYearlyTag(tags))
-            {
-                tags = YearlyTaskRules.EnsureYearlyTag(tags);
-            }
+            // Миграция устаревших тегов ("Ежемесячно"/"Ежегодно"/"Период - ...") в "Раз в ..." на лету.
+            tags = RecurringTaskRules.MigrateLegacyTags(tags);
 
             tasks.Add(new OneTimeTask(status, Unescape(task), Unescape(assignee), Unescape(comment), tags, dueDate));
         }
 
         return Task.FromResult<IReadOnlyList<OneTimeTask>>(tasks);
+    }
+
+    // Одноразовый импорт данных из legacy-файлов monthly/yearly в единый recurring-файл.
+    // Вызывать только под lock (Sync).
+    private void EnsureMigratedLocked()
+    {
+        if (_legacyImportAttempted || File.Exists(_filePath))
+        {
+            _legacyImportAttempted = true;
+            return;
+        }
+
+        _legacyImportAttempted = true;
+
+        var importedRows = new List<string>();
+        CollectLegacyRows(_legacyMonthlyPath, importedRows);
+        CollectLegacyRows(_legacyYearlyPath, importedRows);
+
+        if (importedRows.Count == 0)
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(_filePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var header =
+            "# Периодические задачи" + Environment.NewLine + Environment.NewLine +
+            HeaderRow + Environment.NewLine +
+            SeparatorRow + Environment.NewLine;
+
+        File.WriteAllText(_filePath, header);
+        foreach (var row in importedRows)
+        {
+            File.AppendAllText(_filePath, row + Environment.NewLine);
+        }
+    }
+
+    private static void CollectLegacyRows(string? legacyPath, List<string> target)
+    {
+        if (string.IsNullOrWhiteSpace(legacyPath) || !File.Exists(legacyPath))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var line in File.ReadAllLines(legacyPath))
+            {
+                if (!line.StartsWith("|", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (line.Contains("Статус", StringComparison.Ordinal) ||
+                    line.Contains("---", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                target.Add(MigrateRowTags(line));
+            }
+        }
+        catch (IOException)
+        {
+            // Legacy-файл недоступен — пропускаем, данные не теряются (файл остаётся на месте).
+        }
+    }
+
+    // Мигрирует ячейку тегов (5-я колонка) строки в стандартный тег периода.
+    private static string MigrateRowTags(string row)
+    {
+        var cells = row.Split('|').ToList();
+        if (cells.Count < 8)
+        {
+            return row;
+        }
+
+        var tags = cells[5]
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        var migrated = RecurringTaskRules.MigrateLegacyTags(tags);
+        cells[5] = $" {string.Join(", ", migrated)} ";
+        return string.Join("|", cells);
     }
 
     private static (string Status, string Task, string Assignee, string Tags, string DueDate, string Comment)? ParseRow(string line)
@@ -560,7 +668,7 @@ public sealed class MarkdownYearlyTaskStorage : IYearlyTaskStorage
         if (!File.Exists(_archivePath))
         {
             var header =
-                "# Архив ежегодных задач" + Environment.NewLine + Environment.NewLine +
+                "# Архив периодических задач" + Environment.NewLine + Environment.NewLine +
                 HeaderRow + Environment.NewLine +
                 SeparatorRow + Environment.NewLine;
 
