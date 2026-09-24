@@ -17,6 +17,6 @@ public enum LlmErrorKind
     ProviderError
 }
 
-public sealed record LlmResponse(string? Content, IReadOnlyList<LlmToolCall> ToolCalls, bool IsError = false, string? Model = null, LlmErrorKind ErrorKind = LlmErrorKind.None);
+public sealed record LlmResponse(string? Content, IReadOnlyList<LlmToolCall> ToolCalls, bool IsError = false, string? Model = null, LlmErrorKind ErrorKind = LlmErrorKind.None, bool FailFast = false);
 
 public sealed record LlmTool(string Name, string Description, string ParametersJson);

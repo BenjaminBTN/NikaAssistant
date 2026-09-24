@@ -276,19 +276,19 @@ public sealed class ChatService
     private static string ProviderErrorMessage(LlmResponse response) => response.ErrorKind switch
     {
         LlmErrorKind.MissingApiKey =>
-            "Чат не настроен: не задан OpenRouter:ApiKey. Вставьте ключ в файл appsettings.Local.json рядом с exe (секция OpenRouter → ApiKey) или задайте переменной окружения OPENROUTER_API_KEY. Перезапуск не нужен — ключ подхватится со следующего сообщения.",
+            "Чат не настроен: не задан LLM-ключ. Для Gemini вставьте ключ из Google AI Studio (aistudio.google.com) в файл appsettings.Local.json рядом с exe (секция Llm → ApiKey) или задайте env-переменную GEMINI_API_KEY. Перезапуск не нужен — ключ подхватится со следующего сообщения.",
         LlmErrorKind.RateLimited =>
             "Слишком много запросов к модели (ошибка 429). Дождитесь сброса лимита и попробуйте снова.",
         LlmErrorKind.InsufficientCredits =>
-            "Закончился баланс аккаунта (ошибка 402). Пополните баланс и попробуйте снова.",
+            "Закончился баланс аккаунта. Проверьте биллинг и попробуйте снова.",
         _ => "Провайдер модели временно недоступен, попробуйте повторить через минуту.",
     };
 
     private static string ProviderErrorShort(LlmResponse response) => response.ErrorKind switch
     {
-        LlmErrorKind.MissingApiKey => "не задан OpenRouter:ApiKey",
+        LlmErrorKind.MissingApiKey => "не задан Llm:ApiKey",
         LlmErrorKind.RateLimited => "превышен лимит запросов к модели (429)",
-        LlmErrorKind.InsufficientCredits => "закончился баланс аккаунта (402)",
+        LlmErrorKind.InsufficientCredits => "закончился баланс аккаунта",
         _ => "временный сбой провайдера",
     };
 

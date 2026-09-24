@@ -8,7 +8,9 @@ using NikaAssistant.Application.Recurring;
 using NikaAssistant.Application.UpdateTask;
 using NikaAssistant.Contracts;
 using NikaAssistant.Domain;
-using NikaAssistant.Infrastructure.LLM.OpenRouter;
+using NikaAssistant.Infrastructure.LLM;
+using NikaAssistant.Infrastructure.LLM.Gemini;
+using NikaAssistant.Infrastructure.LLM.OpenAICompatible;
 using NikaAssistant.Infrastructure.LocalStorage;
 using Serilog;
 using Serilog.Events;
@@ -16,7 +18,8 @@ using Serilog.Events;
 var builder = WebApplication.CreateBuilder(args);
 
 // Локальный секретный файл рядом с exe: не коммитится, приоритет выше appsettings.json.
-// Сюда можно положить OpenRouter:ApiKey и переопределить Model/FallbackModels.
+// Сюда кладётся LLM-ключ (для Gemini — из Google AI Studio) и переопределяются
+// Provider/Model/FallbackModels/BaseUrl.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 // Запуск exe (особенно из папки publish) сразу прописывает его в автозапуск:
@@ -41,8 +44,18 @@ builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}"));
 
 builder.Services.AddOpenApi();
-builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
-builder.Services.AddHttpClient<OpenRouterClient>()
+// Унифицированные настройки LLM: новая секция "Llm" имеет высший приоритет,
+// "Gemini" — алиас, legacy "OpenRouter" подхватывается для обратной совместимости
+// (старые appsettings.Local.json с OpenRouter:ApiKey продолжат работать).
+builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection("OpenRouter"));
+builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection("Gemini"));
+builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection(LlmOptions.SectionName));
+builder.Services.AddHttpClient<GeminiClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(1)
+    });
+builder.Services.AddHttpClient<OpenAiCompatibleClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
         PooledConnectionLifetime = TimeSpan.FromMinutes(1)
@@ -55,7 +68,7 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenRouterClient>());
+builder.Services.AddScoped<ILlmClient, LlmClientRouter>();
 builder.Services.AddSingleton<IOneTimeTaskStorage, MarkdownOneTimeTaskStorage>();
 builder.Services.AddSingleton<IRecurringTaskStorage, MarkdownRecurringTaskStorage>();
 builder.Services.AddScoped<RecurringRolloverService>();
@@ -131,17 +144,25 @@ app.MapGet("/GetYearlyTasks", async (GetTaskHandler handler) =>
 app.MapGet("/Config", () =>
     Results.Ok(new { defaultAssignee = builder.Configuration["Storage:DefaultAssignee"] ?? "" }));
 
-app.MapGet("/LlmConfig", (IOptionsMonitor<OpenRouterOptions> monitor) =>
+app.MapGet("/LlmConfig", (IOptionsMonitor<LlmOptions> monitor) =>
 {
     var snapshot = monitor.CurrentValue;
     var hasApiKey = !string.IsNullOrWhiteSpace(snapshot.ApiKey)
+        || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GEMINI_API_KEY"))
+        || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GOOGLE_API_KEY"))
+        || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LLM_API_KEY"))
+        || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"))
         || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"))
+        || !string.IsNullOrWhiteSpace(builder.Configuration["Llm:ApiKey"])
+        || !string.IsNullOrWhiteSpace(builder.Configuration["Gemini:ApiKey"])
         || !string.IsNullOrWhiteSpace(builder.Configuration["OpenRouter:ApiKey"]);
     return Results.Ok(new
     {
+        provider = snapshot.Provider,
         model = snapshot.Model,
         fallbackModels = snapshot.FallbackModels ?? [],
         hasApiKey,
+        baseUrl = snapshot.BaseUrl,
         referer = snapshot.Referer,
         title = snapshot.Title
     });
