@@ -4,6 +4,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- WinExe только в Release: publish-exe без консольного окна.
+       В Debug (F5 из VS) остается обычная консоль с логами,
+       иначе VS показывает пустое окно хоста (известный баг для Microsoft.NET.Sdk.Web). -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <OutputType>WinExe</OutputType>
   </PropertyGroup>
 
