@@ -188,9 +188,9 @@ public sealed class MarkdownOneTimeTaskStorage : IOneTimeTaskStorage
             var currentTags = string.IsNullOrWhiteSpace(parsed.Tags)
                 ? new List<string>()
                 : parsed.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-            // Теги "Ежемесячно"/"Ежегодно" недоступны для редактирования: сохраняем, если были, и режем, если пытаются добавить.
+            // Тег периода недоступен для редактирования в one-time: сохраняем, если был, и режем, если пытаются добавить.
             var requestedTags = request.NewTags == null ? currentTags : request.NewTags;
-            var effectiveTags = YearlyTaskRules.ApplyEditTagPolicy(currentTags, MonthlyTaskRules.ApplyEditTagPolicy(currentTags, requestedTags));
+            var effectiveTags = RecurringTaskRules.ApplyEditTagPolicy(currentTags, requestedTags);
             var newTags = string.Join(", ", effectiveTags.Select(Escape));
 
             var newTask = request.NewTask ?? parsed.Task;

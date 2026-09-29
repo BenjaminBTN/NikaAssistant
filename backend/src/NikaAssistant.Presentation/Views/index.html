@@ -55,6 +55,22 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
+    /* Чат с ассистентом: обычное блочное окно в потоке страницы (при скролле
+       уезжает вместе с остальным содержимым, без position:fixed/sticky),
+       а высота лога сообщений подбирается JS под высоту экрана так, чтобы
+       низ окна чата был с небольшим отступом от нижнего края экрана. */
+    #chat-card {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    #chat-log {
+      /* Стартовое значение до пересчёта JS; затем выставляется точная высота.
+         min-height маленький, чтобы на низких экранах (RDP, масштаб 125%+,
+         зум браузера) не было переполнения до срабатывания JS. */
+      height: 300px;
+      min-height: 120px;
+    }
     /* Мобильная адаптация таблицы задач: строки становятся карточками друг под другом,
        чтобы не было горизонтальной прокрутки. */
     @media (max-width: 767px) {
@@ -172,23 +188,16 @@
 
     <section class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div class="w-full min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div>
-            <h2 class="text-lg font-bold">Список задач</h2>
-            <p class="mt-1 text-sm text-slate-500">Сначала срочное, затем зависшее и ожидания</p>
-          </div>
-        </div>
-
         <table id="tasks-table" class="w-full min-w-0 text-left md:table-fixed">
           <thead class="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th class="w-[8%] px-4 py-3 text-center font-semibold">Статус</th>
-              <th class="w-[28%] px-4 py-3 font-semibold">Задача</th>
+              <th class="w-[32%] px-4 py-3 font-semibold">Задача</th>
               <th class="w-[13%] px-4 py-3 text-center font-semibold">Срок</th>
               <th class="w-[13%] px-4 py-3 font-semibold">Ответственный</th>
               <th class="w-[11%] px-4 py-3 text-center font-semibold">Теги</th>
               <th class="w-[17%] px-4 py-3 font-semibold">Комментарий</th>
-              <th class="w-[10%] px-4 py-3 text-center font-semibold"></th>
+              <th class="w-[6%] px-2 py-3 text-center font-semibold"></th>
             </tr>
           </thead>
           <tbody id="tasks-body">
@@ -200,11 +209,11 @@
       </div>
 
       <aside class="w-full min-w-0 space-y-6">
-        <div class="rounded-lg border border-slate-200 bg-white">
-          <div class="border-b border-slate-200 px-5 py-4">
+        <div id="chat-card" class="rounded-lg border border-slate-200 bg-white">
+          <div class="chat-header border-b border-slate-200 px-5 py-4">
             <h2 class="text-lg font-bold">Чат с ассистентом</h2>
           </div>
-          <div id="chat-log" class="h-[300px] space-y-3 overflow-y-auto px-5 py-4">
+          <div id="chat-log" class="space-y-3 overflow-y-auto px-5 py-4">
             <div class="text-sm text-slate-400">История сообщений пуста.</div>
           </div>
           <form id="chat-form" class="flex min-w-0 items-end gap-3 border-t border-slate-200 px-5 py-4">
@@ -245,12 +254,23 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Теги</label>
-          <div id="task-tags" class="mt-1 flex flex-wrap gap-3">
+          <div id="task-tags" class="mt-1 grid grid-cols-3 gap-3">
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Срочно" /> Срочно</label>
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Зависло" /> Зависло</label>
             <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ожидание" /> Ожидание</label>
-            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ежемесячно" /> Ежемесячно</label>
-            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="checkbox" name="tag" value="Ежегодно" /> Ежегодно</label>
+          </div>
+        </div>
+        <div>
+          <span class="block text-sm font-medium text-slate-700">Повтор</span>
+          <div class="mt-1 space-y-2">
+            <label class="flex items-center gap-1.5 text-sm text-slate-700"><input type="radio" name="repeat" value="none" checked /> Без повтора</label>
+            <label class="flex flex-wrap items-center gap-1.5 text-sm text-slate-700"><input type="radio" name="repeat" value="custom" /> Свой период: раз в <input id="repeat-custom-n" type="number" min="1" step="1" value="1" class="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+              <select id="repeat-custom-unit" class="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-900">
+                <option value="days">дней</option>
+                <option value="months" selected>месяцев</option>
+                <option value="years">лет</option>
+              </select>
+            </label>
           </div>
         </div>
         <div>
@@ -327,6 +347,45 @@
 
       ensureDefaultDueDate();
 
+      // Повтор: выбор интервала; клик по числу/селекту сам включает свой радиопункт.
+      function pluralizeRu(n, forms) {
+        var mod100 = n % 100, mod10 = n % 10;
+        if (mod100 >= 11 && mod100 <= 14) return forms[2];
+        if (mod10 === 1) return forms[0];
+        if (mod10 >= 2 && mod10 <= 4) return forms[1];
+        return forms[2];
+      }
+
+      function periodTagFor(n, unit) {
+        n = Math.floor(Number(n));
+        if (!n || n < 1) return null;
+        if (unit === "days") return "Раз в " + n + " " + pluralizeRu(n, ["день", "дня", "дней"]);
+        if (unit === "months") return "Раз в " + n + " " + pluralizeRu(n, ["месяц", "месяца", "месяцев"]);
+        if (unit === "years") return "Раз в " + n + " " + pluralizeRu(n, ["год", "года", "лет"]);
+        return null;
+      }
+
+      function selectedRepeatMode() {
+        var checked = form.querySelector('input[name="repeat"]:checked');
+        return checked ? checked.value : "none";
+      }
+
+      function currentPeriodTag() {
+        if (selectedRepeatMode() !== "custom") return null;
+        return periodTagFor(document.getElementById("repeat-custom-n").value, document.getElementById("repeat-custom-unit").value);
+      }
+
+      [["repeat-custom-n", "custom"], ["repeat-custom-unit", "custom"]].forEach(function (pair) {
+        var input = document.getElementById(pair[0]);
+        if (!input) return;
+        function selectCustomRadio() {
+          var radio = form.querySelector('input[name="repeat"][value="' + pair[1] + '"]');
+          if (radio && !radio.checked) radio.checked = true;
+        }
+        input.addEventListener("focus", selectCustomRadio);
+        input.addEventListener("click", selectCustomRadio);
+      });
+
       openBtn.addEventListener("click", showModal);
       cancelBtn.addEventListener("click", hideModal);
       modal.addEventListener("click", function (e) {
@@ -359,6 +418,14 @@
           if (cb.checked) selectedTags.push(cb.value);
         });
 
+        var periodTag = currentPeriodTag();
+        var repeatMode = selectedRepeatMode();
+        if (repeatMode !== "none" && !periodTag) {
+          alert("Укажите корректный период повтора (целое число не меньше 1)");
+          return;
+        }
+        if (periodTag) selectedTags.push(periodTag);
+
         var rawDue = form.dueDate ? form.dueDate.value : "";
         var payload = {
           task: form.task.value.trim(),
@@ -382,46 +449,28 @@
             var created = null;
             try { created = await res.json(); } catch (e) { created = null; }
 
-            var isMonthly = selectedTags.indexOf("Ежемесячно") !== -1;
-            var isYearly = selectedTags.indexOf("Ежегодно") !== -1;
-            var appendMonthly = window.appendMonthlyTask || window.appendTask;
-            var appendYearly = window.appendYearlyTask || window.appendTask;
+            var isRecurring = !!periodTag;
+            var appendRecurring = window.appendRecurringTask || window.appendTask;
 
-            // Ежемесячная/ежегодная с датой сегодня/завтра сразу расщепляется на бэкенде
-            // (копия в one-time + сдвиг на месяц/год) — перечитываем оба списка,
+            // Периодическая с датой сегодня/завтра сразу расщепляется на бэкенде
+            // (копия в one-time + сдвиг на период) — перечитываем оба списка,
             // чтобы показать актуальное состояние, а не оптимистичное,
             // затем подсвечиваем и проматываем к новой задаче.
-            if ((isMonthly || isYearly) && window.loadTasks) {
+            if (isRecurring && window.loadTasks) {
               await window.loadTasks();
               var recurringTitle = (created && created.task) || payload.task;
-              if (recurringTitle) {
-                if (isMonthly && window.markMonthlyNew) {
-                  window.markMonthlyNew(recurringTitle);
-                }
-                if (isYearly && window.markYearlyNew) {
-                  window.markYearlyNew(recurringTitle);
-                }
+              if (recurringTitle && window.markRecurringNew) {
+                window.markRecurringNew(recurringTitle);
               }
               return;
             }
 
-            if (created && isMonthly && appendMonthly) {
-              appendMonthly(created);
-            } else if (created && isYearly && appendYearly) {
-              appendYearly(created);
+            if (created && isRecurring && appendRecurring) {
+              appendRecurring(created);
             } else if (created && window.appendTask) {
               window.appendTask(created);
-            } else if (isMonthly && appendMonthly) {
-              appendMonthly({
-                task: payload.task,
-                assignee: payload.assignee || window.defaultAssignee || "",
-                comment: payload.comment,
-                tags: payload.tags || [],
-                dueDate: payload.dueDate || "",
-                status: "[ ]"
-              });
-            } else if (isYearly && appendYearly) {
-              appendYearly({
+            } else if (isRecurring && appendRecurring) {
+              appendRecurring({
                 task: payload.task,
                 assignee: payload.assignee || window.defaultAssignee || "",
                 comment: payload.comment,
@@ -463,14 +512,22 @@
         { key: "Ожидание", cls: "bg-blue-50 text-blue-700 ring-blue-200" }
       ];
 
-      // Теги "Ежемесячно"/"Ежегодно" отображаем, но не даём выбирать при редактировании —
-      // они доступны только в форме создания.
-      var MONTHLY_TAG = "Ежемесячно";
-      var YEARLY_TAG = "Ежегодно";
+      // Тег периода "Раз в ..." отображаем, но не даём менять при редактировании —
+      // интервал задаётся только в форме создания.
+      var LEGACY_MONTHLY_TAG = "Ежемесячно";
+      var LEGACY_YEARLY_TAG = "Ежегодно";
+      var PERIOD_TAG_RE = /^Раз\s+в\s+\d+\s*(день|дня|дней|месяц|месяца|месяцев|год|года|лет)$/i;
+      // Предыдущий формат: только чтение и отображение, новое не создаём.
+      var LEGACY_PERIOD_TAG_RE = /^Период\s*-\s*\d+\s*(день|дня|дней|месяц|месяца|месяцев|год|года|лет)$/i;
       var TAGS_DISPLAY = TAGS.concat([
-        { key: MONTHLY_TAG, cls: "bg-slate-100 text-slate-600 ring-slate-200" },
-        { key: YEARLY_TAG, cls: "bg-slate-100 text-slate-600 ring-slate-200" }
+        { key: LEGACY_MONTHLY_TAG, cls: "bg-slate-100 text-slate-600 ring-slate-200" },
+        { key: LEGACY_YEARLY_TAG, cls: "bg-slate-100 text-slate-600 ring-slate-200" }
       ]);
+
+      function isPeriodTag(tag) {
+        var s = String(tag || "").trim();
+        return PERIOD_TAG_RE.test(s) || LEGACY_PERIOD_TAG_RE.test(s);
+      }
 
       function getTaskTags(t) {
         if (Array.isArray(t.tags)) return t.tags;
@@ -533,7 +590,7 @@
         return dd + "." + mm + "." + yyyy + " " + hh + ":" + min;
       }
 
-      var groupCollapsed = { overdue: false, today: false, tomorrow: false, later: false, monthly: false, yearly: false };
+      var groupCollapsed = { overdue: false, today: false, tomorrow: false, later: true, recurring: true };
 
       function taskIdentity(t) {
         return {
@@ -546,36 +603,51 @@
       }
 
       var allTasks = [];
-      var monthlyTasks = [];
-      var yearlyTasks = [];
+      var recurringTasks = [];
       var defaultAssignee = "";
       var currentFilter = null;
       var taskUidCounter = 0;
 
+      function isRecurringRow(t) {
+        return !!t._recurring;
+      }
+
+      // Алиасы старых флагов (до объединения) — на случай кэшированных данных.
       function isMonthlyRow(t) {
-        return !!t._monthly;
+        return isRecurringRow(t);
       }
 
       function isYearlyRow(t) {
-        return !!t._yearly;
+        return isRecurringRow(t);
       }
 
       function updateEndpointFor(t) {
-        if (isYearlyRow(t)) return "/UpdateYearlyTask";
-        return isMonthlyRow(t) ? "/UpdateMonthlyTask" : "/UpdateTask";
+        return isRecurringRow(t) ? "/UpdateRecurringTask" : "/UpdateTask";
       }
 
       function deleteEndpointFor(t) {
-        if (isYearlyRow(t)) return "/DeleteYearlyTask";
-        return isMonthlyRow(t) ? "/DeleteMonthlyTask" : "/DeleteTask";
+        return isRecurringRow(t) ? "/DeleteRecurringTask" : "/DeleteTask";
+      }
+
+      function getPeriodTag(t) {
+        var tags = getTaskTags(t);
+        var fallback = null;
+        for (var i = 0; i < tags.length; i++) {
+          if (PERIOD_TAG_RE.test(String(tags[i] || "").trim())) return tags[i];
+          if (fallback === null && isPeriodTag(tags[i])) fallback = tags[i];
+        }
+        if (fallback !== null) return fallback;
+        if (tags.indexOf(LEGACY_MONTHLY_TAG) !== -1) return LEGACY_MONTHLY_TAG;
+        if (tags.indexOf(LEGACY_YEARLY_TAG) !== -1) return LEGACY_YEARLY_TAG;
+        return null;
       }
 
       function hasMonthlyTag(t) {
-        return getTaskTags(t).indexOf(MONTHLY_TAG) !== -1;
+        return getTaskTags(t).indexOf(LEGACY_MONTHLY_TAG) !== -1;
       }
 
       function hasYearlyTag(t) {
-        return getTaskTags(t).indexOf(YEARLY_TAG) !== -1;
+        return getTaskTags(t).indexOf(LEGACY_YEARLY_TAG) !== -1;
       }
 
       function ensureTaskUid(t) {
@@ -771,11 +843,10 @@
         buckets.tomorrow.sort(sortByTime);
         buckets.later.sort(sortByTime);
 
-        // При фильтре по верхним карточкам ежемесячные/ежегодные шаблоны не показываем.
-        var monthlyList = currentFilter ? [] : monthlyTasks.slice().sort(sortByTime);
-        var yearlyList = currentFilter ? [] : yearlyTasks.slice().sort(sortByTime);
+        // При фильтре по верхним карточкам периодические шаблоны не показываем.
+        var recurringList = currentFilter ? [] : recurringTasks.slice().sort(sortByTime);
 
-        if (visible.length === 0 && monthlyList.length === 0 && yearlyList.length === 0) {
+        if (visible.length === 0 && recurringList.length === 0) {
           tbody.innerHTML = '<tr class="tasks-placeholder border-b border-slate-200"><td class="px-4 py-4 align-top text-sm text-slate-500" colspan="7">' +
             (currentFilter ? "Нет задач по выбранному фильтру" : "Нет задач") +
             '</td></tr>';
@@ -792,31 +863,18 @@
           });
         });
 
-        // Раскрывающие списки ежемесячных/ежегодных задач внизу (как остальные: скрыты, если пусты).
+        // Раскрывающий список периодических задач внизу (как остальные: скрыт, если пуст).
         // Дату показываем как в "Позднее".
-        // monthlyList/yearlyList уже вычислены выше с учётом currentFilter.
-        if (monthlyList.length > 0) {
-          monthlyList.forEach(function (t) {
-            if (t._new) groupCollapsed.monthly = false;
+        // recurringList уже вычислен выше с учётом currentFilter.
+        if (recurringList.length > 0) {
+          recurringList.forEach(function (t) {
+            if (t._new) groupCollapsed.recurring = false;
           });
-          var monthlyGroup = { key: "monthly", title: "Ежемесячно" };
-          tbody.appendChild(createGroupHeader(monthlyGroup, monthlyList.length));
-          if (!groupCollapsed.monthly) {
-            monthlyList.forEach(function (t) {
-              appendTaskRow(tbody, t, "monthly");
-            });
-          }
-        }
-
-        if (yearlyList.length > 0) {
-          yearlyList.forEach(function (t) {
-            if (t._new) groupCollapsed.yearly = false;
-          });
-          var yearlyGroup = { key: "yearly", title: "Ежегодно" };
-          tbody.appendChild(createGroupHeader(yearlyGroup, yearlyList.length));
-          if (!groupCollapsed.yearly) {
-            yearlyList.forEach(function (t) {
-              appendTaskRow(tbody, t, "yearly");
+          var recurringGroup = { key: "recurring", title: "Периодические" };
+          tbody.appendChild(createGroupHeader(recurringGroup, recurringList.length));
+          if (!groupCollapsed.recurring) {
+            recurringList.forEach(function (t) {
+              appendTaskRow(tbody, t, "recurring");
             });
           }
         }
@@ -827,8 +885,8 @@
         tags.forEach(function (tag) {
           var found = TAGS_DISPLAY.filter(function (x) { return x.key === tag; })[0];
           var span = document.createElement("span");
-          span.className = "rounded-md px-2.5 py-1 text-xs font-medium ring-1 " +
-            (found ? found.cls : "bg-slate-100 text-slate-700 ring-slate-200");
+          span.className = "rounded-md px-2.5 py-1 text-xs font-medium ring-1 whitespace-nowrap " +
+            (found ? found.cls : (isPeriodTag(tag) ? "bg-slate-100 text-slate-600 ring-slate-200" : "bg-slate-100 text-slate-700 ring-slate-200"));
           span.textContent = found ? found.key : tag;
           container.appendChild(span);
         });
@@ -843,15 +901,14 @@
 
         var statusCell = document.createElement("td");
         statusCell.className = "flex justify-center px-4 py-4";
-        var monthlyRow = bucket === "monthly" || isMonthlyRow(t);
-        var yearlyRow = bucket === "yearly" || isYearlyRow(t);
-        var recurringRow = monthlyRow || yearlyRow;
+        var recurringRow = bucket === "recurring" || isRecurringRow(t);
         if (recurringRow) {
-          // Ежемесячные/ежегодные не отмечаются выполненными — кружок с "m"/"y", без действий.
+          // Периодические не отмечаются выполненными — кружок с "⟳", без действий.
           var recurringMark = document.createElement("span");
           recurringMark.className = "flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-sm font-semibold text-slate-500 select-none";
-          recurringMark.textContent = yearlyRow ? "y" : "m";
-          recurringMark.title = yearlyRow ? "Ежегодная задача" : "Ежемесячная задача";
+          recurringMark.textContent = "⟳";
+          var periodTitle = getPeriodTag(t);
+          recurringMark.title = periodTitle ? ("Периодическая задача (" + periodTitle + ")") : "Периодическая задача";
           statusCell.appendChild(recurringMark);
         } else {
           var checkBtn = document.createElement("button");
@@ -897,7 +954,7 @@
         if (tagsView.childElementCount === 0) {
           var tagsEditBtn = document.createElement("button");
           tagsEditBtn.type = "button";
-          tagsEditBtn.className = "rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900";
+          tagsEditBtn.className = "rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-slate-900";
           tagsEditBtn.title = "Изменить теги";
           tagsEditBtn.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
           tagsEditBtn.addEventListener("click", function (e) {
@@ -909,7 +966,7 @@
         tagsCell.appendChild(tagsWrap);
 
         var effectiveBucket = bucket;
-        if (effectiveBucket === "monthly" || effectiveBucket === "yearly") effectiveBucket = "later";
+        if (effectiveBucket === "recurring" || effectiveBucket === "monthly" || effectiveBucket === "yearly") effectiveBucket = "later";
         if (!effectiveBucket) {
           var _now = new Date();
           var _today = startOfDay(_now);
@@ -928,8 +985,10 @@
         actionCell.className = "px-2 py-4 text-center align-top";
         var deleteBtn = document.createElement("button");
         deleteBtn.type = "button";
-        deleteBtn.className = "rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 whitespace-nowrap";
-        deleteBtn.textContent = "Удалить";
+        deleteBtn.className = "rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-700";
+        deleteBtn.title = "Удалить задачу";
+        deleteBtn.setAttribute("aria-label", "Удалить задачу");
+        deleteBtn.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
         deleteBtn.addEventListener("click", function () {
           deleteTask(t, tr);
         });
@@ -1316,6 +1375,15 @@
           label.appendChild(document.createTextNode(tag.key));
           popup.appendChild(label);
         });
+        // Тег периода показываем как неизменяемый (интервал задаётся при создании).
+        var period = getPeriodTag(t);
+        if (period) {
+          var periodNote = document.createElement("div");
+          periodNote.className = "mt-1 rounded bg-slate-50 px-1 py-1 text-xs text-slate-500";
+          periodNote.textContent = period;
+          periodNote.title = "Период меняется только пересозданием задачи";
+          popup.appendChild(periodNote);
+        }
         popup.classList.remove("hidden");
         var r = anchorEl.getBoundingClientRect();
         var pw = 176;
@@ -1350,12 +1418,10 @@
         });
 
         var previous = getTaskTags(t);
-        // Теги "Ежемесячно"/"Ежегодно" недоступны для редактирования — молча сохраняем, если были.
-        if (previous.indexOf(MONTHLY_TAG) !== -1 && selected.indexOf(MONTHLY_TAG) === -1) {
-          selected.push(MONTHLY_TAG);
-        }
-        if (previous.indexOf(YEARLY_TAG) !== -1 && selected.indexOf(YEARLY_TAG) === -1) {
-          selected.push(YEARLY_TAG);
+        // Тег периода недоступен для редактирования — молча сохраняем, если был.
+        var prevPeriod = getPeriodTag({ tags: previous });
+        if (prevPeriod && selected.indexOf(prevPeriod) === -1) {
+          selected.push(prevPeriod);
         }
         t.tags = selected.slice();
         updateSummary();
@@ -1570,9 +1636,7 @@
 
       async function updateDueDate(t, newDueBackend) {
         var previous = getDueDate(t) || "";
-        var wasMonthly = isMonthlyRow(t);
-        var wasYearly = isYearlyRow(t);
-        var wasRecurring = wasMonthly || wasYearly;
+        var wasRecurring = isRecurringRow(t);
         t.dueDate = newDueBackend;
         t.DueDate = newDueBackend;
         renderTasks();
@@ -1599,7 +1663,7 @@
             renderTasks();
             alert("Не удалось обновить срок");
           } else if (wasRecurring && window.loadTasks) {
-            // Ручная смена даты ежемесячной/ежегодной на сегодня/завтра расщепляется
+            // Ручная смена даты периодической на сегодня/завтра расщепляется
             // на бэкенде — перечитываем списки, чтобы увидеть копию в one-time
             // и сдвинутую дату повторяемой задачи.
             await window.loadTasks();
@@ -1634,10 +1698,8 @@
             if (row && row.parentNode) row.parentNode.removeChild(row);
             var idx = allTasks.indexOf(t);
             if (idx !== -1) allTasks.splice(idx, 1);
-            var midx = monthlyTasks.indexOf(t);
-            if (midx !== -1) monthlyTasks.splice(midx, 1);
-            var yidx = yearlyTasks.indexOf(t);
-            if (yidx !== -1) yearlyTasks.splice(yidx, 1);
+            var ridx = recurringTasks.indexOf(t);
+            if (ridx !== -1) recurringTasks.splice(ridx, 1);
             updateSummary();
             renderTasks();
           } else {
@@ -1680,32 +1742,33 @@
 
       window.appendTask = function (t) {
         if (!t) return;
-        // Скопированные one-time с тегами "Ежемесячно"/"Ежегодно" живут в основном списке (попадают в "Завтра").
+        // Скопированные one-time с тегом "Раз в ..." живут в основном списке (попадают в "Завтра").
         if (allTasks.indexOf(t) === -1) allTasks.push(t);
         t._new = true;
         updateSummary();
         renderTasks();
       };
 
-      window.appendMonthlyTask = function (t) {
+      window.appendRecurringTask = function (t) {
         if (!t) return;
-        t._monthly = true;
-        if (!hasMonthlyTag(t)) {
-          t.tags = (getTaskTags(t)).concat([MONTHLY_TAG]);
-        }
-        if (monthlyTasks.indexOf(t) === -1) monthlyTasks.push(t);
+        t._recurring = true;
+        if (recurringTasks.indexOf(t) === -1) recurringTasks.push(t);
         t._new = true;
         updateSummary();
         renderTasks();
       };
 
-      // Подсветка и проматывание к только что созданной ежемесячной задаче
+      // Алиасы старых имён (до объединения) — на случай внешних вызовов.
+      window.appendMonthlyTask = window.appendRecurringTask;
+      window.appendYearlyTask = window.appendRecurringTask;
+
+      // Подсветка и проматывание к только что созданной периодической задаче
       // после перезагрузки списков (флаг _new при loadTasks теряется).
-      window.markMonthlyNew = function (title) {
+      window.markRecurringNew = function (title) {
         if (!title) return;
         var needle = String(title).toLowerCase();
         var target = null;
-        monthlyTasks.forEach(function (t) {
+        recurringTasks.forEach(function (t) {
           if ((t.task || "").toLowerCase() === needle) target = t;
         });
         if (!target) return;
@@ -1714,32 +1777,8 @@
         renderTasks();
       };
 
-      window.appendYearlyTask = function (t) {
-        if (!t) return;
-        t._yearly = true;
-        if (!hasYearlyTag(t)) {
-          t.tags = (getTaskTags(t)).concat([YEARLY_TAG]);
-        }
-        if (yearlyTasks.indexOf(t) === -1) yearlyTasks.push(t);
-        t._new = true;
-        updateSummary();
-        renderTasks();
-      };
-
-      // Подсветка и проматывание к только что созданной ежегодной задаче
-      // после перезагрузки списков (флаг _new при loadTasks теряется).
-      window.markYearlyNew = function (title) {
-        if (!title) return;
-        var needle = String(title).toLowerCase();
-        var target = null;
-        yearlyTasks.forEach(function (t) {
-          if ((t.task || "").toLowerCase() === needle) target = t;
-        });
-        if (!target) return;
-        target._new = true;
-        updateSummary();
-        renderTasks();
-      };
+      window.markMonthlyNew = window.markRecurringNew;
+      window.markYearlyNew = window.markRecurringNew;
 
       window.loadTasks = async function () {
         var tbody = document.getElementById("tasks-body");
@@ -1753,31 +1792,46 @@
 
           allTasks = tasks.slice();
           try {
-            var mres = await fetch("/GetMonthlyTasks");
-            if (mres.ok) {
-              var mtasks = await mres.json();
-              if (Array.isArray(mtasks)) {
-                mtasks.forEach(function (t) { t._monthly = true; });
-                monthlyTasks = mtasks;
+            var rres = await fetch("/GetRecurringTasks");
+            if (rres.ok) {
+              var rtasks = await rres.json();
+              if (Array.isArray(rtasks)) {
+                rtasks.forEach(function (t) { t._recurring = true; });
+                recurringTasks = rtasks;
               }
+            } else {
+              await loadRecurringLegacy();
             }
-          } catch (e) { /* ежемесячные опциональны */ }
-          try {
-            var yres = await fetch("/GetYearlyTasks");
-            if (yres.ok) {
-              var ytasks = await yres.json();
-              if (Array.isArray(ytasks)) {
-                ytasks.forEach(function (t) { t._yearly = true; });
-                yearlyTasks = ytasks;
-              }
-            }
-          } catch (e) { /* ежегодные опциональны */ }
+          } catch (e) {
+            try { await loadRecurringLegacy(); } catch (e2) { /* периодические опциональны */ }
+          }
           updateSummary();
           renderTasks();
         } catch (e) {
           // оставляем заглушку при ошибке
         }
       };
+
+      // Откат для старых бэкендов (до объединения): два отдельных списка склеиваем в один.
+      async function loadRecurringLegacy() {
+        var merged = [];
+        try {
+          var mres = await fetch("/GetMonthlyTasks");
+          if (mres.ok) {
+            var mtasks = await mres.json();
+            if (Array.isArray(mtasks)) merged = merged.concat(mtasks);
+          }
+        } catch (e) { /* ежемесячные опциональны */ }
+        try {
+          var yres = await fetch("/GetYearlyTasks");
+          if (yres.ok) {
+            var ytasks = await yres.json();
+            if (Array.isArray(ytasks)) merged = merged.concat(ytasks);
+          }
+        } catch (e) { /* ежегодные опциональны */ }
+        merged.forEach(function (t) { t._recurring = true; });
+        recurringTasks = merged;
+      }
 
       (function init() {
         function start() { window.loadTasks(); }
@@ -1805,6 +1859,95 @@
       });
       window.addEventListener("resize", closeTagPopup);
       window.addEventListener("scroll", closeTagPopup, true);
+    })();
+
+    // Подгон высоты чата под высоту экрана: окно чата остаётся обычным блоком
+    // в потоке страницы (при скролле уезжает вместе с остальным содержимым),
+    // но высота лога подбирается так, чтобы при положении страницы вверху
+    // низ окна чата был с небольшим отступом от нижнего края экрана.
+    // Важно для RDP на весь экран (FullHD + масштаб Windows 125-150% / зум
+    // браузера): реальная CSS-высота вьюпорта там 650-750px, доступного места
+    // под лог меньше 300px, поэтому жёсткий минимум запрещён — лог сжимается
+    // до ABSOLUTE_MIN, гарантируя, что низ карточки остаётся в экране.
+    (function () {
+      var BOTTOM_GAP = 24; // небольшой отступ от нижнего края экрана, px
+      var PREFERRED_MIN_LOG = 300; // желаемый минимум на высоких экранах, px
+      var ABSOLUTE_MIN_LOG = 120; // жёсткий минимум, ниже не сжимаем, px
+      var MOBILE_BREAKPOINT = 1280; // xl: до него aside идёт отдельной строкой под таблицей
+
+      function viewportHeight() {
+        // visualViewport точнее при зуме/масштабе/RDP (учитывает сужение
+        // видимой области), иначе — классический innerHeight.
+        if (window.visualViewport && window.visualViewport.height) {
+          return Math.round(window.visualViewport.height);
+        }
+        if (window.innerHeight) return window.innerHeight;
+        return document.documentElement ? document.documentElement.clientHeight : 800;
+      }
+
+      function fitChatHeight() {
+        var card = document.getElementById("chat-card");
+        var log = document.getElementById("chat-log");
+        if (!card || !log) return;
+        var header = card.querySelector(".chat-header");
+        var form = document.getElementById("chat-form");
+
+        // На узких экранах чат заведомо ниже первого экрана (под таблицей) —
+        // привязываться к низу экрана не нужно, даём компактную высоту.
+        if (window.innerWidth < MOBILE_BREAKPOINT) {
+          log.style.height = "";
+          log.style.minHeight = ABSOLUTE_MIN_LOG + "px";
+          log.style.maxHeight = "70vh";
+          return;
+        }
+        log.style.maxHeight = "";
+
+        // Верх карточки относительно документа — высота не зависит от текущего
+        // скролла и не меняется при прокрутке страницы.
+        var rect = card.getBoundingClientRect();
+        var cardTopDoc = rect.top + (window.scrollY || window.pageYOffset || 0);
+        var headerH = header ? header.offsetHeight : 0;
+        var formH = form ? form.offsetHeight : 0;
+        var vh = viewportHeight();
+        // На низких экранах уменьшаем отступ, чтобы оставить больше места логу.
+        var gap = vh < 800 ? 12 : BOTTOM_GAP;
+        // +2px — запас на верхнюю/нижнюю границы карточки.
+        var available = vh - cardTopDoc - gap - headerH - formH - 2;
+        var logH;
+        if (available >= PREFERRED_MIN_LOG) {
+          logH = available;
+        } else if (available >= ABSOLUTE_MIN_LOG) {
+          // Низкий вьюпорт (RDP/зум/масштаб): сжимаемся ради вписывания в экран.
+          logH = available;
+        } else {
+          logH = ABSOLUTE_MIN_LOG;
+        }
+
+        log.style.height = Math.round(logH) + "px";
+        log.style.minHeight = ABSOLUTE_MIN_LOG + "px";
+      }
+
+      window.fitChatHeight = fitChatHeight;
+      window.addEventListener("load", function () {
+        // Два кадра + небольшая задержка: ждём Tailwind CDN и отрисовку шапки/карточек.
+        requestAnimationFrame(function () {
+          requestAnimationFrame(fitChatHeight);
+        });
+        setTimeout(fitChatHeight, 300);
+      });
+      window.addEventListener("resize", fitChatHeight);
+      window.addEventListener("orientationchange", fitChatHeight);
+      // Зум, появление/скрытие панелей браузера, RDP connection bar:
+      // visualViewport меняется без window.resize.
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", fitChatHeight);
+      }
+      // Первый расчёт сразу для стартового рендера (до события load).
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", fitChatHeight);
+      } else {
+        fitChatHeight();
+      }
     })();
 
     (function () {
@@ -1850,7 +1993,20 @@
         input.rows = 1;
         input.style.height = "auto";
         input.style.overflowY = "hidden";
-        input.style.height = input.scrollHeight + "px";
+        // Ограничиваем рост поля ввода, чтобы низ окна чата оставался
+        // с отступом от края экрана; дальше текст скроллится внутри поля.
+        // На низких экранах (RDP/масштаб/зум) cap меньше, иначе растущее поле
+        // вытеснит низ карточки за экран.
+        var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 800;
+        var maxInputH = vh < 800 ? 80 : 160;
+        var h = input.scrollHeight;
+        if (h > maxInputH) {
+          h = maxInputH;
+          input.style.overflowY = "auto";
+        }
+        input.style.height = h + "px";
+        // Компенсируем высоту лога, чтобы низ карточки чата оставался на месте.
+        if (typeof window.fitChatHeight === "function") window.fitChatHeight();
       }
 
       input.addEventListener("input", autoGrowChat);
@@ -1935,5 +2091,6 @@
       });
     })();
   </script>
+  <footer class="fixed bottom-1 right-4 text-xs text-slate-400">v.1.3.0</footer>
 </body>
 </html>

@@ -3,11 +3,11 @@ using NikaAssistant.Contracts;
 
 namespace NikaAssistant.Application.DeleteTask;
 
-public sealed class DeleteMonthlyTaskHandler
+public sealed class DeleteRecurringTaskHandler
 {
-    private readonly IMonthlyTaskStorage _storage;
+    private readonly IRecurringTaskStorage _storage;
 
-    public DeleteMonthlyTaskHandler(IMonthlyTaskStorage storage)
+    public DeleteRecurringTaskHandler(IRecurringTaskStorage storage)
     {
         _storage = storage;
     }

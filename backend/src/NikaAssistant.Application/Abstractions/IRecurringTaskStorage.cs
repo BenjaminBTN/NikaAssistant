@@ -2,7 +2,7 @@ using NikaAssistant.Contracts;
 
 namespace NikaAssistant.Application.Abstractions;
 
-public interface IMonthlyTaskStorage
+public interface IRecurringTaskStorage
 {
     Task AddAsync(AddTaskRequest request, CancellationToken cancellationToken = default);
 

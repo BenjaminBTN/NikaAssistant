@@ -3,11 +3,11 @@ using NikaAssistant.Contracts;
 
 namespace NikaAssistant.Application.UpdateTask;
 
-public sealed class UpdateYearlyTaskHandler
+public sealed class UpdateRecurringTaskHandler
 {
-    private readonly IYearlyTaskStorage _storage;
+    private readonly IRecurringTaskStorage _storage;
 
-    public UpdateYearlyTaskHandler(IYearlyTaskStorage storage)
+    public UpdateRecurringTaskHandler(IRecurringTaskStorage storage)
     {
         _storage = storage;
     }
